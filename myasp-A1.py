@@ -28,6 +28,8 @@ from env import EnvTimeSeriesfromRepo
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
+from llm_shaping import shaped_reward
+
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
 ############################
@@ -551,7 +553,24 @@ def train_wrapper(num_LP, num_AL, discount_factor):
         for i in range(len(dataset_dir)):
             env = EnvTimeSeriesfromRepo(dataset_dir[i])
             env.statefnc = RNNBinaryStateFuc
-            env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae, dynamic_coef=10.0)
+            #env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae, dynamic_coef=10.0)
+
+            env.rewardfnc = lambda ts, tc, a: [
+                # action = 0
+                shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0)[0],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=DISCOUNT_FACTOR
+                ),
+                # action = 1
+                shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0)[1],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=DISCOUNT_FACTOR
+                )
+            ]
             env.timeseries_curser_init = n_steps
             env.datasetfix = DATAFIXED
             env.datasetidx = 0
