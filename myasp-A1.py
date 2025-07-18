@@ -28,7 +28,7 @@ from env import EnvTimeSeriesfromRepo
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
-from llm_shaping import shaped_reward
+from llm_shaping import shaped_reward, llm_logs
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
@@ -510,7 +510,8 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             axarr[1].set_title('Predictions')
             axarr[2].plot(ground_truths, color='r')
             axarr[2].set_title('Ground Truth')
-            plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
+            #plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
+            plt.savefig(os.path.join(record_dir, f"validation_episode_{i_episode}.svg"), format="svg")
             plt.close(f)
     rec_file.close()
     avg_f1 = np.mean(f1_all)
@@ -555,15 +556,14 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             env.statefnc = RNNBinaryStateFuc
             #env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae, dynamic_coef=10.0)
 
+            # new: wrap both actions in potential‐based shaping
             env.rewardfnc = lambda ts, tc, a: [
-                # action = 0
                 shaped_reward(
                     raw_reward=RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0)[0],
                     s=ts['value'][tc - n_steps:tc].values,
                     s2=ts['value'][tc - n_steps + 1:tc + 1].values,
                     gamma=DISCOUNT_FACTOR
                 ),
-                # action = 1
                 shaped_reward(
                     raw_reward=RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0)[1],
                     s=ts['value'][tc - n_steps:tc].values,
@@ -612,6 +612,25 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                                                     int(env.datasetsize * (1 - validation_separate_ratio)),
                                                     experiment_dir)
             save_plots(experiment_dir, episode_rewards, coef_history)
+            # 1) Save all Φ(s) values for histogram
+            import csv
+            with open(os.path.join(experiment_dir, "llm_potentials.csv"), "w") as f:
+                w = csv.writer(f)
+                w.writerow(["window", "phi"])
+                for win, phi in llm_logs:
+                    w.writerow([",".join(f"{v:.2f}" for v in win), phi])
+
+            # 2) Save reward and lambda curves as SVG
+            plt.figure();
+            plt.plot(episode_rewards);
+            plt.title("Reward Curve")
+            plt.savefig(os.path.join(experiment_dir, "reward_curve.svg"), format="svg");
+            plt.close()
+            plt.figure();
+            plt.plot(coef_history);
+            plt.title("Lambda Curve")
+            plt.savefig(os.path.join(experiment_dir, "lambda_curve.svg"), format="svg");
+            plt.close()
             return final_metric
 
 
