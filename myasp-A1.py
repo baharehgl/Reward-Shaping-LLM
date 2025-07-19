@@ -594,7 +594,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 
             with sess.as_default():
                 episode_rewards, coef_history = q_learning(env, sess, qlearn_estimator, target_estimator,
-                                                           num_episodes=300, num_epoches=10,
+                                                           num_episodes=3, num_epoches=10,
                                                            experiment_dir=experiment_dir,
                                                            replay_memory_size=500000,
                                                            replay_memory_init_size=1500,
