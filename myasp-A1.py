@@ -539,35 +539,27 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
     return avg_f1
 
 
-def save_plots(experiment_dir, all_episode_rewards, all_coef_histories, labels):
-    """
-    all_episode_rewards:  list of lists, one per LLM model
-    all_coef_histories:  list of lists, one per LLM model
-    labels:              list of model‐names, same length
-    """
-    os.makedirs(os.path.join(experiment_dir,"plots"), exist_ok=True)
-    # 1) Reward curves
+def save_plots(experiment_dir, episode_rewards, coef_history):
+    plot_dir = os.path.join(experiment_dir, "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+
+    # reward curve
     plt.figure()
-    for rewards, name in zip(all_episode_rewards, labels):
-        plt.plot(rewards, label=name)
-    plt.title("Training Reward by LLM Model")
+    plt.plot(episode_rewards, marker='o')
     plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.legend()
-    plt.savefig(os.path.join(experiment_dir,"plots","reward_all_models.svg"), format="svg")
+    plt.ylabel("Episode Reward")
+    plt.title("Training Reward Curve")
+    plt.savefig(os.path.join(plot_dir, "reward_curve.svg"), format="svg")
     plt.close()
 
-    # 2) Lambda curves
+    # lambda curve
     plt.figure()
-    for coefs, name in zip(all_coef_histories, labels):
-        plt.plot(coefs, label=name)
-    plt.title("Dynamic Coefficient by LLM Model")
+    plt.plot(coef_history, marker='s')
     plt.xlabel("Episode")
-    plt.ylabel("λ(t)")
-    plt.legend()
-    plt.savefig(os.path.join(experiment_dir,"plots","lambda_all_models.svg"), format="svg")
+    plt.ylabel("Dynamic Coefficient")
+    plt.title("Lambda Evolution")
+    plt.savefig(os.path.join(plot_dir, "lambda_curve.svg"), format="svg")
     plt.close()
-
 
 def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
