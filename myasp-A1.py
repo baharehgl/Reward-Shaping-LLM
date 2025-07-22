@@ -57,6 +57,26 @@ n_hidden_dim = 128  # hidden dimension
 
 validation_separate_ratio = 0.9
 
+def plot_phi_histogram(experiment_dir):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    csv_path = os.path.join(experiment_dir, "llm_potentials.csv")
+    if not os.path.exists(csv_path):
+        print("No llm_potentials.csv found in", experiment_dir)
+        return
+    df = pd.read_csv(csv_path)
+    plt.figure()
+    plt.hist(df['phi'], bins=50)
+    plt.title("Distribution of LLM Potentials Φ(s)")
+    plt.xlabel("Φ(s)")
+    plt.ylabel("Count")
+    out = os.path.join(experiment_dir, "plots", "phi_histogram.svg")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    plt.savefig(out, format="svg")
+    plt.close()
+
+
+
 
 ########################### VAE Setup #####################
 def load_normal_data(data_path, n_steps):
@@ -519,23 +539,33 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
     return avg_f1
 
 
-def save_plots(experiment_dir, episode_rewards, coef_history):
-    plot_dir = os.path.join(experiment_dir, "plots")
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+def save_plots(experiment_dir, all_episode_rewards, all_coef_histories, labels):
+    """
+    all_episode_rewards:  list of lists, one per LLM model
+    all_coef_histories:  list of lists, one per LLM model
+    labels:              list of model‐names, same length
+    """
+    os.makedirs(os.path.join(experiment_dir,"plots"), exist_ok=True)
+    # 1) Reward curves
     plt.figure()
-    plt.plot(episode_rewards, marker='o')
+    for rewards, name in zip(all_episode_rewards, labels):
+        plt.plot(rewards, label=name)
+    plt.title("Training Reward by LLM Model")
     plt.xlabel("Episode")
-    plt.ylabel("Episode Reward")
-    plt.title("Training Reward Curve")
-    plt.savefig(os.path.join(plot_dir, "reward_curve.png"))
+    plt.ylabel("Reward")
+    plt.legend()
+    plt.savefig(os.path.join(experiment_dir,"plots","reward_all_models.svg"), format="svg")
     plt.close()
+
+    # 2) Lambda curves
     plt.figure()
-    plt.plot(coef_history, marker='s', color='orange')
+    for coefs, name in zip(all_coef_histories, labels):
+        plt.plot(coefs, label=name)
+    plt.title("Dynamic Coefficient by LLM Model")
     plt.xlabel("Episode")
-    plt.ylabel("Dynamic Coefficient")
-    plt.title("Dynamic Coefficient Evolution")
-    plt.savefig(os.path.join(plot_dir, "dynamic_coef_curve.png"))
+    plt.ylabel("λ(t)")
+    plt.legend()
+    plt.savefig(os.path.join(experiment_dir,"plots","lambda_all_models.svg"), format="svg")
     plt.close()
 
 
@@ -620,7 +650,10 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                 for win, phi in llm_logs:
                     w.writerow([",".join(f"{v:.2f}" for v in win), phi])
 
-            # 2) Save reward and lambda curves as SVG
+            # 2) plot the φ histogram
+            plot_phi_histogram(experiment_dir)
+
+            # 3) Save reward and lambda curves as SVG
             plt.figure();
             plt.plot(episode_rewards);
             plt.title("Reward Curve")
