@@ -43,4 +43,5 @@ def compute_potential(window_tuple):
 def shaped_reward(raw_reward, s, s2, gamma):
     φ_s  = compute_potential(tuple(s))
     φ_s2 = compute_potential(tuple(s2))
+    llm_logs.append((s.copy(), φ_s))
     return raw_reward + gamma * φ_s2 - φ_s
