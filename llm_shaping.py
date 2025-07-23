@@ -24,6 +24,7 @@ llm_logs = []
 
 @lru_cache(maxsize=10000)
 def compute_potential(window_tuple):
+    print(f"[LLM] → {LLM_CHOICE}  prompt starts with: {str(window_tuple)[:50]}…")
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 (normal) to 1.0 (critical)."
     if LLM_CHOICE.startswith("gpt"):
