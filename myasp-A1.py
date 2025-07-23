@@ -396,7 +396,7 @@ def q_learning(env, sess, qlearn_estimator, target_estimator, num_episodes, num_
     coef_history = []
 
     for i_episode in range(num_episodes):
-        env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae_model, dynamic_coef=dynamic_coef)
+        #env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae_model, dynamic_coef=dynamic_coef)
         episode_reward = 0.0
 
         if i_episode % 50 == 49:
