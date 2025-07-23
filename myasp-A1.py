@@ -540,7 +540,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             plt.savefig(os.path.join(record_dir, "combined_plot.svg"), format="svg")
             plt.close()
             '''
-            
+
             f, axarr = plt.subplots(3, sharex=True)
             axarr[0].plot(ts_values)
             axarr[0].set_title('Time Series')
