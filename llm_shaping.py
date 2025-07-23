@@ -1,11 +1,16 @@
 # llm_shaping.py
 import os
-from functools import lru_cache
 import openai
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# -----------------------------------------------------------------------------
+# 1) Make sure the key is set, or die loudly
+# -----------------------------------------------------------------------------
+if "OPENAI_API_KEY" not in os.environ:
+    raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
+openai.api_key = os.environ["OPENAI_API_KEY"]
+
 LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")  # or "gpt-4-0613" or "llama-3"
 
 # If using Llama-3:
@@ -22,21 +27,26 @@ if LLM_CHOICE.startswith("llama-3"):
 
 llm_logs = []
 
-@lru_cache(maxsize=10000)
 def compute_potential(window_tuple):
-    print(f"[LLM] → {LLM_CHOICE}  prompt starts with: {str(window_tuple)[:50]}…")
+    """
+    For *every* call, call the LLM and append to llm_logs.
+    """
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 (normal) to 1.0 (critical)."
+    print(f"[LLM CALL] model={LLM_CHOICE!r}  prompt='{prompt[:60]}…'")
     if LLM_CHOICE.startswith("gpt"):
-        r = openai.ChatCompletion.create(
+        resp = openai.ChatCompletion.create(
             model=LLM_CHOICE,
-            messages=[{"role":"user","content":prompt}],
-            temperature=0.0, max_tokens=4
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=4,
         )
-        score = float(r.choices[0].message.content.strip())
+        score = float(resp.choices[0].message.content.strip())
     else:
         out = _llama_pipe(prompt)[0]["generated_text"]
         score = float(out.strip().split()[-1])
+
+    # clamp to [0,1]
     score = max(0.0, min(1.0, score))
     llm_logs.append((window_tuple, score))
     return score
@@ -44,5 +54,5 @@ def compute_potential(window_tuple):
 def shaped_reward(raw_reward, s, s2, gamma):
     φ_s  = compute_potential(tuple(s))
     φ_s2 = compute_potential(tuple(s2))
-    llm_logs.append((s.copy(), φ_s))
+    # note: no need for a second append here, compute_potential already logged both φ(s) and φ(s2)
     return raw_reward + gamma * φ_s2 - φ_s
