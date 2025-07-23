@@ -28,7 +28,19 @@ from env import EnvTimeSeriesfromRepo
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
-from llm_shaping import shaped_reward, llm_logs
+#from llm_shaping import shaped_reward, llm_logs
+import importlib
+import llm_shaping
+importlib.reload(llm_shaping)
+from llm_shaping import compute_potential, shaped_reward, llm_logs
+
+# Sanity-check that compute_potential actually prints
+print(">>> DEBUG: testing compute_potential right now!")
+from llm_shaping import compute_potential
+compute_potential((0.0,) * 25)
+print(">>> DEBUG: test complete")
+
+
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
