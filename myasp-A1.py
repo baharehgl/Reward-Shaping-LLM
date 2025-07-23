@@ -523,6 +523,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
         print("Episode {}: Precision:{}, Recall:{}, F1-score:{}".format(i_episode+1, precision, recall, f1))
         rec_file.write("Episode {}: Precision:{}, Recall:{}, F1-score:{}\n".format(i_episode+1, precision, recall, f1))
         if plot:
+            '''
             fig, ax = plt.subplots(figsize=(8, 4))
             ax.plot(ts_values, label="Original", linewidth=1)
             ax.plot(predictions, label="Forecast", linewidth=1)  
@@ -539,6 +540,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             plt.savefig(os.path.join(record_dir, "combined_plot.svg"), format="svg")
             plt.close()
             '''
+            
             f, axarr = plt.subplots(3, sharex=True)
             axarr[0].plot(ts_values)
             axarr[0].set_title('Time Series')
@@ -549,7 +551,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             #plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
             plt.savefig(os.path.join(record_dir, f"validation_episode_{i_episode}.svg"), format="svg")
             plt.close(f)
-            '''
+
     rec_file.close()
     avg_f1 = np.mean(f1_all)
     print("Average F1-score over {} episodes: {}".format(num_episodes, avg_f1))
