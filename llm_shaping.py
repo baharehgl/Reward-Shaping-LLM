@@ -28,14 +28,13 @@ if LLM_CHOICE.startswith("llama-3"):
 llm_logs = []
 
 def compute_potential(window_tuple):
-    """
-    For *every* call, call the LLM and append to llm_logs.
-    """
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 (normal) to 1.0 (critical)."
     print(f"[LLM CALL] model={LLM_CHOICE!r}  prompt='{prompt[:60]}…'")
+
     if LLM_CHOICE.startswith("gpt"):
-        resp = openai.ChatCompletion.create(
+        # ← use the new API path under openai.chat.completions
+        resp = openai.chat.completions.create(
             model=LLM_CHOICE,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -46,11 +45,9 @@ def compute_potential(window_tuple):
         out = _llama_pipe(prompt)[0]["generated_text"]
         score = float(out.strip().split()[-1])
 
-    # clamp to [0,1]
     score = max(0.0, min(1.0, score))
     llm_logs.append((window_tuple, score))
     return score
-
 def shaped_reward(raw_reward, s, s2, gamma):
     φ_s  = compute_potential(tuple(s))
     φ_s2 = compute_potential(tuple(s2))
