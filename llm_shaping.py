@@ -4,6 +4,7 @@ import openai
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 import re
+from functools import lru_cache
 
 # -----------------------------------------------------------------------------
 # 1) Make sure the key is set, or die loudly
@@ -28,6 +29,7 @@ if LLM_CHOICE.startswith("llama-3"):
     )
 
 llm_logs = []
+@lru_cache(maxsize=10_000)
 def compute_potential(window_tuple):
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = (
