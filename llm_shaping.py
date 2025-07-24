@@ -9,6 +9,7 @@ import re
 # 1) Make sure the key is set, or die loudly
 # -----------------------------------------------------------------------------
 if "OPENAI_API_KEY" not in os.environ:
+    print(">>> USING API KEY:", os.environ.get("OPENAI_API_KEY")[:5] + "…")
     raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
@@ -27,8 +28,6 @@ if LLM_CHOICE.startswith("llama-3"):
     )
 
 llm_logs = []
-
-
 def compute_potential(window_tuple):
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = (
@@ -39,13 +38,15 @@ def compute_potential(window_tuple):
     print(f"[LLM CALL] model={LLM_CHOICE!r}  prompt='{prompt[:60]}…'")
 
     if LLM_CHOICE.startswith("gpt"):
-        resp = openai.chat.completions.create(
+        print(f"[LLM CALL] model={LLM_CHOICE!r} prompt={prompt!r}")
+        resp = openai.ChatCompletion.create(
             model=LLM_CHOICE,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=4,
         )
         raw = resp.choices[0].message.content.strip()
+        print(f"[LLM RAW ] {raw!r}")
     else:
         raw = _llama_pipe(prompt)[0]["generated_text"].strip()
 
