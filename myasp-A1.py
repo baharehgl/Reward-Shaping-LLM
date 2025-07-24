@@ -598,6 +598,7 @@ def save_plots(experiment_dir, episode_rewards, coef_history):
 
 def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
+    llm_logs.clear()
     x_train = load_normal_data(data_directory, n_steps)
     vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
     vae.fit(x_train, epochs=2, batch_size=32)
