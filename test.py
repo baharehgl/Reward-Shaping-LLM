@@ -28,6 +28,7 @@ def rewardfnc_debug(ts, tc, a):
 data_dir = os.path.join(os.getcwd(),
     "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark")
 env = EnvTimeSeriesfromRepo(data_dir)
+env.timeseries_curser_init = n_steps   # start at 25
 env.rewardfnc = rewardfnc_debug
 
 # **THIS IS THE KEY LINE**: initialize timeseries, timeseries_curser, etc.
