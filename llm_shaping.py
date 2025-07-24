@@ -39,7 +39,7 @@ def compute_potential(window_tuple):
 
     if LLM_CHOICE.startswith("gpt"):
         print(f"[LLM CALL] model={LLM_CHOICE!r} prompt={prompt!r}")
-        resp = openai.ChatCompletion.create(
+        resp = openai.chat.completions.create(
             model=LLM_CHOICE,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
