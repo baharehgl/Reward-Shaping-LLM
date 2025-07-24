@@ -610,6 +610,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
         dataset_dir = [os.path.join(current_dir, "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark")]
         for i in range(len(dataset_dir)):
             env = EnvTimeSeriesfromRepo(dataset_dir[i])
+            env.timeseries_curser_init = n_steps
             env.statefnc = RNNBinaryStateFuc
             #env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae, dynamic_coef=10.0)
 
