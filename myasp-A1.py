@@ -598,7 +598,11 @@ def save_plots(experiment_dir, episode_rewards, coef_history):
 
 def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
+    print(">>> TRAIN CANARY: φ(zeros) =", compute_potential((0.0,) * n_steps))
+    print(">>> TRAIN CANARY: after call llm_logs =", llm_logs)
     llm_logs.clear()
+    print(f"[TRAIN] starting run, llm_logs cleared → length={len(llm_logs)}")
+
     x_train = load_normal_data(data_directory, n_steps)
     vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
     vae.fit(x_train, epochs=2, batch_size=32)
