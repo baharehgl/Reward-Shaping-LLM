@@ -597,6 +597,147 @@ def save_plots(experiment_dir, episode_rewards, coef_history):
     plt.savefig(os.path.join(plot_dir, "lambda_curve.svg"), format="svg")
     plt.close()
 
+
+
+
+def train_wrapper(num_LP, num_AL, discount_factor):
+    """
+    Trains the RL agent with LLM-based potential shaping and saves metrics & plots.
+    Smoke-tests one shaping step before running full training.
+    Returns final validation metric (e.g., F1-score).
+    """
+    # 1) Prepare and train VAE on normal data
+    data_directory = os.path.join(current_dir, "normal-data")
+    x_train = load_normal_data(data_directory, n_steps)
+    vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
+    vae.fit(x_train, epochs=2, batch_size=32)
+    vae.save('vae_model.h5')
+
+    # We'll run on 100% of data by default
+    percentage = [1.0]
+    test = 0
+
+    for j, pct in enumerate(percentage):
+        # Build experiment directory name
+        exp_name = f"A1_LP{num_LP}_AL{num_AL}_d{discount_factor:.2f}"
+        exp_relative_dir = [exp_name]
+        dataset_dirs = [os.path.join(current_dir, "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark")]
+
+        for i, ds_path in enumerate(dataset_dirs):
+            # Instantiate environment
+            env = EnvTimeSeriesfromRepo(ds_path)
+
+            # Clear previous LLM cache & logs
+            compute_potential.cache_clear()
+            llm_logs.clear()
+
+            # Initialize cursor and state function
+            env.timeseries_curser_init = n_steps
+            _ = env.reset()
+            env.statefnc = RNNBinaryStateFuc
+
+            # Assign reward function with correct gamma
+            def shaping_fn(ts, tc, a):
+                phi0 = shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0)[0],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=discount_factor
+                )
+                phi1 = shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0)[1],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=discount_factor
+                )
+                return [phi0, phi1]
+
+            env.rewardfnc = shaping_fn
+
+            # SMOKE TEST: confirm shaping fires and logs
+            compute_potential.cache_clear()
+            llm_logs.clear()
+
+            # Force a valid cursor step
+            env.timeseries_curser = n_steps
+            ts_copy = env.timeseries.copy()
+            r0 = env.rewardfnc(ts_copy, n_steps, 0)
+            r1 = env.rewardfnc(ts_copy, n_steps, 1)
+            print("🚨 SMOKE TEST shaped rewards:", r0, r1)
+            print("🚨 SMOKE TEST llm_logs entries:", llm_logs)
+            assert len(llm_logs) >= 2, "LLM shaping did not fire!"
+
+            # Prepare test env (no shaping)
+            env_test = EnvTimeSeriesfromRepo(ds_path)
+            env_test.timeseries_curser_init = n_steps
+            env_test.statefnc = RNNBinaryStateFuc
+            env_test.rewardfnc = RNNBinaryRewardFucTest
+
+            # Dataset split
+            if test == 1:
+                env.datasetrng = env.datasetsize
+            else:
+                env.datasetrng = int(env.datasetsize * pct)
+
+            experiment_dir = os.path.abspath(os.path.join("./exp", exp_relative_dir[i]))
+
+            # Reset TF graph & load VAE
+            tf.compat.v1.reset_default_graph()
+            vae = load_model('vae_model.h5', custom_objects={'Sampling': Sampling}, compile=False)
+            sess = tf.compat.v1.Session()
+            from tensorflow.compat.v1.keras import backend as K
+            K.set_session(sess)
+            global_step = tf.Variable(0, name="global_step", trainable=False)
+
+            # Build estimators
+            qlearn_estimator = Q_Estimator_Nonlinear(scope="qlearn",
+                                                    summaries_dir=experiment_dir,
+                                                    learning_rate=0.0003)
+            target_estimator = Q_Estimator_Nonlinear(scope="target")
+            sess.run(tf.compat.v1.global_variables_initializer())
+
+            # Run training & validation
+            with sess.as_default():
+                episode_rewards, coef_history = q_learning(
+                    env, sess, qlearn_estimator, target_estimator,
+                    num_episodes=3,
+                    num_epoches=10,
+                    experiment_dir=experiment_dir,
+                    replay_memory_size=500000,
+                    replay_memory_init_size=1500,
+                    update_target_estimator_every=10,
+                    epsilon_start=1.0,
+                    epsilon_end=0.1,
+                    epsilon_decay_steps=500000,
+                    discount_factor=discount_factor,
+                    batch_size=256,
+                    num_LabelPropagation=num_LP,
+                    num_active_learning=num_AL,
+                    test=test,
+                    vae_model=vae
+                )
+                final_metric = q_learning_validator(
+                    env_test, qlearn_estimator,
+                    int(env.datasetsize * (1 - validation_separate_ratio)),
+                    experiment_dir
+                )
+
+            # Save plots and logs
+            save_plots(experiment_dir, episode_rewards, coef_history)
+            import csv
+            os.makedirs(experiment_dir, exist_ok=True)
+            with open(os.path.join(experiment_dir, "llm_potentials.csv"), "w") as f:
+                writer = csv.writer(f)
+                writer.writerow(["window", "phi"])
+                for win, phi in llm_logs:
+                    writer.writerow([" ".join(f"{v:.2f}" for v in win), phi])
+
+            plot_phi_histogram(experiment_dir)
+
+            return final_metric
+
+
+'''
 def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
     x_train = load_normal_data(data_directory, n_steps)
@@ -700,7 +841,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             plt.savefig(os.path.join(experiment_dir, "lambda_curve.svg"), format="svg");
             plt.close()
             return final_metric
-
+'''
 
 #train_wrapper(100, 1000, 0.92)
 #train_wrapper(150, 5000, 0.94)
