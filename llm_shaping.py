@@ -65,5 +65,7 @@ def compute_potential(window_tuple):
 def shaped_reward(raw_reward, s, s2, gamma):
     φ_s  = compute_potential(tuple(s))
     φ_s2 = compute_potential(tuple(s2))
+    total = raw_reward + gamma * φ_s2 - φ_s
+    print(f"[DEBUG SHAPING] φ(s)={φ_s:.3f}, φ(s')={φ_s2:.3f}, raw={raw_reward:.3f} → total={total:.3f}")
     # note: no need for a second append here, compute_potential already logged both φ(s) and φ(s2)
-    return raw_reward + gamma * φ_s2 - φ_s
+    return total
