@@ -35,7 +35,8 @@ importlib.reload(llm_shaping)
 from llm_shaping import compute_potential, shaped_reward, llm_logs
 
 
-
+compute_potential.cache_clear()
+llm_logs.clear()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 
@@ -610,9 +611,12 @@ def train_wrapper(num_LP, num_AL, discount_factor):
         dataset_dir = [os.path.join(current_dir, "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark")]
         for i in range(len(dataset_dir)):
             env = EnvTimeSeriesfromRepo(dataset_dir[i])
+            compute_potential.cache_clear()
+            llm_logs.clear()
             env.timeseries_curser_init = n_steps
             _ = env.reset()
-            print(">>> TRAIN CANARY:", compute_potential((0.0,) * n_steps), llm_logs)
+            print(">>> TRAIN CANARY (fresh): φ(zeros) =", compute_potential((0.0,) * n_steps))
+            print(">>> TRAIN CANARY log entries:", llm_logs)
             llm_logs.clear()
             env.statefnc = RNNBinaryStateFuc
             #env.rewardfnc = lambda ts, tc, a: RNNBinaryRewardFuc(ts, tc, a, vae, dynamic_coef=10.0)
