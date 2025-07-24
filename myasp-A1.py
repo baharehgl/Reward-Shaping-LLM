@@ -64,14 +64,11 @@ n_hidden_dim = 128  # hidden dimension
 
 validation_separate_ratio = 0.9
 
-# 1a) Canary: should print exactly one LLM CALL
-print(">>> DEBUG: testing compute_potential right now!")
-compute_potential((0.0,) * n_steps)   # n_steps is 25
-print(">>> DEBUG: test complete")
-
-# 1b) Clear that canary entry
+# Canary: should print exactly one LLM CALL
+print(">>> TRAIN CANARY: φ(zeros) =", compute_potential((0.0,)*n_steps))
+print(">>> TRAIN CANARY: after call llm_logs =", llm_logs)
 llm_logs.clear()
-print(f">>> DEBUG: llm_logs after clear = {len(llm_logs)}")
+print(f"[TRAIN] starting run, llm_logs cleared → length={len(llm_logs)}")
 
 def plot_phi_histogram(experiment_dir):
     import pandas as pd
