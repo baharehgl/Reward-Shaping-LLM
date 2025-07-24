@@ -1,6 +1,6 @@
-Episode 1: Precision:0.25806451612903225, Recall:0.47058823529411764, F1-score:0.3333333333333333
-Episode 2: Precision:0.45454545454545453, Recall:0.47619047619047616, F1-score:0.46511627906976744
-Episode 3: Precision:0.8, Recall:0.5217391304347826, F1-score:0.6315789473684211
-Episode 4: Precision:0.06896551724137931, Recall:0.26229508196721313, F1-score:0.10921501706484643
-Episode 5: Precision:0.3076923076923077, Recall:0.4, F1-score:0.34782608695652173
+Episode 1: Precision:0.0, Recall:0.0, F1-score:0.0
+Episode 2: Precision:0.0, Recall:0.0, F1-score:0.0
+Episode 3: Precision:0.0, Recall:0.0, F1-score:0.0
+Episode 4: Precision:0.0, Recall:0.0, F1-score:0.0
+Episode 5: Precision:0.0, Recall:0.0, F1-score:0.0
 Episode 6: Precision:0.0, Recall:0.0, F1-score:0.0

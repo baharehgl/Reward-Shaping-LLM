@@ -34,11 +34,6 @@ import llm_shaping
 importlib.reload(llm_shaping)
 from llm_shaping import compute_potential, shaped_reward, llm_logs
 
-# Sanity-check that compute_potential actually prints
-print(">>> DEBUG: testing compute_potential right now!")
-from llm_shaping import compute_potential
-compute_potential((0.0,) * 25)
-print(">>> DEBUG: test complete")
 
 
 
@@ -68,6 +63,15 @@ n_input_dim = 2  # dimension of input to LSTM
 n_hidden_dim = 128  # hidden dimension
 
 validation_separate_ratio = 0.9
+
+# 1a) Canary: should print exactly one LLM CALL
+print(">>> DEBUG: testing compute_potential right now!")
+compute_potential((0.0,) * n_steps)   # n_steps is 25
+print(">>> DEBUG: test complete")
+
+# 1b) Clear that canary entry
+llm_logs.clear()
+print(f">>> DEBUG: llm_logs after clear = {len(llm_logs)}")
 
 def plot_phi_histogram(experiment_dir):
     import pandas as pd
@@ -443,7 +447,10 @@ def q_learning(env, sess, qlearn_estimator, target_estimator, num_episodes, num_
                 state = env.states_list[sample]
                 action_probs = policy(state, epsilon)
                 action = np.random.choice(np.arange(len(action_probs)), p=action_probs)
-                next_state, reward, done, _ = env.step(action)
+                #next_state, reward, done, _ = env.step(action)
+                print(f">>> DEBUG: stepping at cursor={env.timeseries_curser}")
+                next_state, reward, done, info = env.step(action)
+                print(f">>> DEBUG: raw reward returned = {reward}")
                 episode_reward += reward[action]
                 if len(replay_memory) == replay_memory_size:
                     replay_memory.pop(0)
