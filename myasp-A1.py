@@ -558,6 +558,8 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             plt.close()
             '''
 
+
+
             f, axarr = plt.subplots(3, sharex=True)
             axarr[0].plot(ts_values)
             axarr[0].set_title('Time Series')
@@ -568,6 +570,38 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             #plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
             plt.savefig(os.path.join(record_dir, f"validation_episode_{i_episode}.svg"), format="svg")
             plt.close(f)
+
+            # ─── 2×2 Detection Panel ──────────────────────────────────────────
+            # helper function, put this at top of file once:
+            def plot_detection(ts, pred, true_anom, det_anom, title, ax):
+                ax.plot(ts, label="Original signal", linewidth=1)
+                ax.plot(pred, label="Forecast signal", linewidth=1)
+                for t in np.where(true_anom)[0]:
+                    ax.axvspan(t - 0.5, t + 0.5, color="green", alpha=0.2)  # true
+                for t in np.where(det_anom)[0]:
+                    ax.axvspan(t - 0.5, t + 0.5, color="gray", alpha=0.2)  # detected
+                ax.set_title(title)
+                ax.legend(loc="upper left")
+
+            # build 2×2 figure
+            fig, axs = plt.subplots(2, 2, figsize=(10, 5))
+            ts = np.array(ts_values)
+            preds = np.array(predictions)
+            gts = np.array(ground_truths)
+
+            # Top‐left: no forecast
+            plot_detection(ts, np.zeros_like(ts), gts, preds, "No Forecast", axs[0, 0])
+            # Top‐right: with forecast
+            plot_detection(ts, preds, gts, preds, "With Forecast", axs[0, 1])
+            # Bottom panels: if you have a second series, replace below;
+            # otherwise reuse the same for demo
+            plot_detection(ts, np.zeros_like(ts), gts, preds, "No Forecast", axs[1, 0])
+            plot_detection(ts, preds, gts, preds, "With Forecast", axs[1, 1])
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(record_dir, f"detection_episode_{i_episode}.svg"), format="svg")
+            plt.close(fig)
+            # ─────────────────────────────────────────────────────────────────
 
     rec_file.close()
     avg_f1 = np.mean(f1_all)
@@ -734,6 +768,32 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 
             plot_phi_histogram(experiment_dir)
 
+            # ─── LLM Diagnostics ────────────────────────────────────────────
+            import pandas as pd
+
+            # Load potentials CSV
+            df = pd.read_csv(os.path.join(experiment_dir, "llm_potentials.csv"))
+            phis = df["phi"].values
+
+            # 1) Φ(s) time series
+            plt.figure()
+            plt.plot(phis, marker='.')
+            plt.title("LLM Potential Φ(s) over time")
+            plt.xlabel("window index")
+            plt.ylabel("Φ(s)")
+            plt.savefig(os.path.join(experiment_dir, "plots", "phi_timeseries.svg"), format="svg")
+            plt.close()
+
+            # 2) Φ(s) distribution
+            plt.figure()
+            plt.hist(phis, bins=50, alpha=0.7)
+            plt.title("Histogram of LLM Potentials Φ(s)")
+            plt.xlabel("Φ(s)")
+            plt.ylabel("Count")
+            plt.savefig(os.path.join(experiment_dir, "plots", "phi_distribution.svg"), format="svg")
+            plt.close()
+            # ─────────────────────────────────────────────────────────────────
+
             return final_metric
 
 
@@ -848,4 +908,4 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 #train_wrapper(200, 10000, 0.96)
 train_wrapper(200, 1000, 0.96)
 train_wrapper(200, 5000, 0.96)
-train_wrapper(200, 10000, 0.96)
+#train_wrapper(200, 10000, 0.96)
