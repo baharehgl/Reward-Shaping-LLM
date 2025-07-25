@@ -1,28 +1,30 @@
-import os, pickle
-import numpy as np
-import pandas as pd
-from llm_shaping import compute_potential  # this is your existing LLM function
+# build_phi_lookup.py
+import os, pickle, numpy as np, pandas as pd
+from llm_shaping import compute_potential  # still uses live API here
 
-n_steps = 25
+n_steps    = 25
+model_name = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
+lookup_fn  = f"phi_lookup_{model_name}.pkl"
+
 data_dir = os.path.join(os.path.dirname(__file__),
-                        "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark")
+                        "ydata-labeled-time-series-anomalies-v1_0",
+                        "A1Benchmark")
 
-# 1) Gather all windows (quantized to 2 decimals)
+# 1) collect windows
 lookup = {}
 for fname in os.listdir(data_dir):
-    path = os.path.join(data_dir, fname)
-    df = pd.read_csv(path)
+    df   = pd.read_csv(os.path.join(data_dir, fname))
     vals = df['value'].values
     for t in range(n_steps, len(vals)):
-        w = tuple(np.round(vals[t-n_steps:t], 2))
+        w = tuple(np.round(vals[t - n_steps:t], 2))
         lookup.setdefault(w, None)
 
-# 2) Compute φ exactly once per unique window
+# 2) call the live compute_potential once per w
 for w in lookup:
     lookup[w] = compute_potential(w)
 
-# 3) Save to disk
-with open("phi_lookup.pkl", "wb") as f:
+# 3) dump to model-specific file
+with open(lookup_fn, "wb") as f:
     pickle.dump(lookup, f)
 
-print(f"✅ Precomputed φ for {len(lookup)} windows → phi_lookup.pkl")
+print(f"✅ Saved lookup for {model_name} → {lookup_fn}")
