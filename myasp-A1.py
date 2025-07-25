@@ -28,7 +28,6 @@ from env import EnvTimeSeriesfromRepo
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
-#from llm_shaping import shaped_reward, llm_logs
 import importlib
 import llm_shaping
 importlib.reload(llm_shaping)
@@ -43,7 +42,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 ############################
 # Macros and Hyperparameters.
 DATAFIXED = 0  # whether target is fixed to a single time series
-EPISODES = 3  # number of episodes (for demonstration)
+EPISODES = 30  # number of episodes (for demonstration)
 DISCOUNT_FACTOR = 0.5  # reward discount factor
 EPSILON = 0.5  # epsilon-greedy parameter
 EPSILON_DECAY = 1.00  # epsilon decay
@@ -644,7 +643,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
     x_train = load_normal_data(data_directory, n_steps)
     vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
-    vae.fit(x_train, epochs=2, batch_size=32)
+    vae.fit(x_train, epochs=20, batch_size=32)
     vae.save('vae_model.h5')
 
     # We'll run on 100% of data by default
@@ -734,7 +733,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             with sess.as_default():
                 episode_rewards, coef_history = q_learning(
                     env, sess, qlearn_estimator, target_estimator,
-                    num_episodes=3,
+                    num_episodes=30,
                     num_epoches=10,
                     experiment_dir=experiment_dir,
                     replay_memory_size=500000,
