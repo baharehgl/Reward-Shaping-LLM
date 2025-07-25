@@ -1,34 +1,24 @@
 # llm_shaping.py
+import os, pickle, numpy as np
 
-import os
-import pickle
-import numpy as np
-from functools import lru_cache
-
-# -----------------------------------------------------------------------------
-# Load your precomputed lookup table of window→φ values
-# -----------------------------------------------------------------------------
-LOOKUP_PATH = os.path.join(os.path.dirname(__file__), "phi_lookup.pkl")
-if not os.path.exists(LOOKUP_PATH):
-    raise FileNotFoundError(f"Could not find φ-lookup at {LOOKUP_PATH}; run build_phi_lookup.py first")
-
-with open(LOOKUP_PATH, "rb") as f:
+model_name = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
+lookup_fn  = os.path.join(os.path.dirname(__file__),
+                          f"phi_lookup_{model_name}.pkl")
+if not os.path.exists(lookup_fn):
+    raise FileNotFoundError(
+      f"No lookup for {model_name}: run build_phi_lookup.py"
+    )
+with open(lookup_fn, "rb") as f:
     PHI_LOOKUP = pickle.load(f)
 
-# We'll still log for later CSV dumping
 llm_logs = []
 
 def compute_potential(window_tuple):
-    """
-    Return the precomputed φ value for this window (quantized to 2 decimals).
-    Falls back to 0.0 if unseen.
-    """
-    # Quantize exactly as in build_phi_lookup.py
     key = tuple(np.round(window_tuple, 2))
     phi = PHI_LOOKUP.get(key, 0.0)
-    # record for histogram CSV
     llm_logs.append((window_tuple, phi))
     return phi
+
 
 def shaped_reward(raw_reward, s, s2, gamma):
     """
