@@ -3,7 +3,7 @@ import os, pickle, numpy as np, pandas as pd
 from llm_shaping import compute_potential  # still uses live API here
 
 n_steps    = 25
-model_name = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
+model_name = os.getenv("LLM_CHOICE", "gpt-3.5-turbo") #"gpt-4-0613", "llama-3"
 lookup_fn  = f"phi_lookup_{model_name}.pkl"
 
 data_dir = os.path.join(os.path.dirname(__file__),
