@@ -1,77 +1,72 @@
 # llm_shaping.py
-import os
-import pickle
+import os, re, pickle
 import numpy as np
+import openai
+from functools import lru_cache
+import torch
 
-BUILD_LOOKUP = os.getenv("BUILD_LOOKUP", "0") == "1"
-model_name  = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
-lookup_fn   = os.path.join(os.path.dirname(__file__),
-                           f"phi_lookup_{model_name}.pkl")
+# These imports only used when we actually call the API:
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-llm_logs = []
+# -----------------------------------------------------------------------------
+# Global state: will be filled by train_wrapper's precompute pass.
+# -----------------------------------------------------------------------------
+PHI_LOOKUP = {}      # window_tuple → φ
+llm_logs    = []     # to replay for CSV after training
 
-if BUILD_LOOKUP:
-    # ----------------------------------------------------
-    # Build-mode: expose the original API-powered compute
-    # ----------------------------------------------------
-    import openai, re
-    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-    import torch
-    from functools import lru_cache
+# Which model are we using right now?
+LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
+openai.api_key = os.environ.get("OPENAI_API_KEY", "")
 
-    if "OPENAI_API_KEY" not in os.environ:
-        raise RuntimeError("Set OPENAI_API_KEY to run build_phi_lookup.py")
+# If using Llama-3, prepare a local pipeline:
+_llama_pipe = None
+if LLM_CHOICE.startswith("llama-3"):
+    tok = AutoTokenizer.from_pretrained("meta-llama/Llama-3-70b-chat")
+    mdl = AutoModelForCausalLM.from_pretrained(
+        "meta-llama/Llama-3-70b-chat", device_map="auto", torch_dtype=torch.float16
+    )
+    _llama_pipe = pipeline(
+        "text-generation", model=mdl, tokenizer=tok,
+        max_new_tokens=8, temperature=0.0, do_sample=False
+    )
 
-    openai.api_key = os.environ["OPENAI_API_KEY"]
-    LLM_CHOICE = model_name
-
-    _llama_pipe = None
-    if LLM_CHOICE.startswith("llama-3"):
-        tok = AutoTokenizer.from_pretrained("meta-llama/Llama-3-70b-chat")
-        mdl = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-3-70b-chat", device_map="auto", torch_dtype=torch.float16
+# Live-API path: we only use this when PHI_LOOKUP is empty (i.e. on first pass)
+@lru_cache(maxsize=100_000)
+def _compute_api(window_tuple):
+    txt = ", ".join(f"{x:.2f}" for x in window_tuple)
+    prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 to 1.0, return only a number."
+    if LLM_CHOICE.startswith("gpt"):
+        resp = openai.ChatCompletion.create(
+            model=LLM_CHOICE,
+            messages=[{"role":"user","content":prompt}],
+            temperature=0.0,
+            max_tokens=4,
         )
-        _llama_pipe = pipeline(
-            "text-generation", model=mdl, tokenizer=tok,
-            max_new_tokens=8, temperature=0.0, do_sample=False
-        )
+        raw = resp.choices[0].message.content.strip()
+    else:
+        raw = _llama_pipe(prompt)[0]["generated_text"].strip()
+    m = re.search(r"([0-9]*\.?[0-9]+)", raw)
+    val = float(m.group(1)) if m else 0.0
+    return max(0.0, min(1.0, val))
 
-    @lru_cache(maxsize=50_000)
-    def compute_potential(window_tuple):
-        txt = ", ".join(f"{x:.2f}" for x in window_tuple)
-        prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 to 1.0, respond with a single numeric value."
-        if LLM_CHOICE.startswith("gpt"):
-            resp = openai.ChatCompletion.create(
-                model=LLM_CHOICE,
-                messages=[{"role":"user","content":prompt}],
-                temperature=0.0,
-                max_tokens=4,
-            )
-            raw = resp.choices[0].message.content.strip()
-        else:
-            raw = _llama_pipe(prompt)[0]["generated_text"].strip()
-        m = re.search(r"([0-9]*\.?[0-9]+)", raw)
-        score = float(m.group(1)) if m else 0.0
-        score = max(0.0, min(1.0, score))
-        return score
+def compute_potential(window_tuple):
+    """
+    If PHI_LOOKUP is not yet populated, call the API.
+    Once PHI_LOOKUP has been filled (by your train_wrapper), this will
+    do a fast dict lookup only.
+    """
+    # Quantize key
+    key = tuple(np.round(window_tuple, 2))
 
-else:
-    # ----------------------------------------------------
-    # Lookup-mode: load precomputed phi_lookup_<model>.pkl
-    # ----------------------------------------------------
-    if not os.path.exists(lookup_fn):
-        raise FileNotFoundError(
-            f"No lookup for {model_name}; run:\n"
-            f"  BUILD_LOOKUP=1 LLM_CHOICE={model_name} python build_phi_lookup.py"
-        )
-    with open(lookup_fn, "rb") as f:
-        PHI_LOOKUP = pickle.load(f)
-
-    def compute_potential(window_tuple):
-        key = tuple(np.round(window_tuple, 2))
+    if PHI_LOOKUP:
+        # lookup‐mode
         phi = PHI_LOOKUP.get(key, 0.0)
-        llm_logs.append((window_tuple, phi))
-        return phi
+    else:
+        # build‐mode → call the API once
+        phi = _compute_api(key)
+
+    llm_logs.append((window_tuple, phi))
+    return phi
 
 def shaped_reward(raw_reward, s, s2, gamma):
     φ_s  = compute_potential(tuple(s))
