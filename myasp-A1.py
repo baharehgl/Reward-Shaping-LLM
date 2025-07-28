@@ -639,6 +639,49 @@ def train_wrapper(num_LP, num_AL, discount_factor):
     Smoke-tests one shaping step before running full training.
     Returns final validation metric (e.g., F1-score).
     """
+    # ───── φ(s) PRECOMPUTE & LOOKUP-MODE PATCH ───────────────────────
+    import llm_shaping
+    from llm_shaping import compute_potential, llm_logs
+    print("🔨 Precomputing unique windows via EnvTimeSeriesfromRepo…")
+
+    # 1) Gather every window your env will see
+    all_windows = {}
+    dataset_dirs = [
+        os.path.join(current_dir, "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark"),
+        # add more dataset roots here if needed
+    ]
+    for ds_path in dataset_dirs:
+        env = EnvTimeSeriesfromRepo(ds_path)
+        env.timeseries_curser_init = n_steps
+        for _ in range(env.datasetsize):
+            env.reset()
+            # env.states_list should be a list of np arrays shape (n_steps, 2)
+            for state in env.states_list:
+                if state is None:
+                    continue
+                # extract the “value” column (column 0), quantize to 2 decimals
+                window = tuple(np.round(state[:, 0], 2))
+                all_windows[window] = None
+
+    # 2) Call LLM once per unique window, filling in all_windows[w] = φ
+    print(f"ℹ️  Computing φ for {len(all_windows)} unique windows (this may take a while)…")
+    for w in all_windows:
+        all_windows[w] = compute_potential(w)
+
+    # 3) Swap out compute_potential for a simple lookup
+    def lookup_potential(window_tuple):
+        key = tuple(np.round(window_tuple, 2))
+        phi = all_windows.get(key, 0.0)
+        # log for CSV export
+        llm_logs.append((window_tuple, phi))
+        return phi
+
+    llm_shaping.compute_potential = lookup_potential
+    llm_logs.clear()  # start fresh for the RL run
+    print("✅ φ-lookup ready; switching compute_potential to fast lookup.")
+    # ────────────────────────────────────────────────────────────────
+
+
     # 1) Prepare and train VAE on normal data
     data_directory = os.path.join(current_dir, "normal-data")
     x_train = load_normal_data(data_directory, n_steps)
