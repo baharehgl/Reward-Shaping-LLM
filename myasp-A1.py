@@ -659,6 +659,11 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             for state in env.states_list:
                 if state is None:
                     continue
+                # ensure it's a 2D array of shape (n_steps, something)
+                if not hasattr(state, "ndim") or state.ndim != 2:
+                    continue
+                if state.shape[0] != n_steps:
+                    continue
                 # extract the “value” column (column 0), quantize to 2 decimals
                 window = tuple(np.round(state[:, 0], 2))
                 all_windows[window] = None
