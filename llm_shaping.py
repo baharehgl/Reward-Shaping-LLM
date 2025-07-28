@@ -37,7 +37,7 @@ def _compute_api(window_tuple):
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = f"Sensor readings: [{txt}]\nRate severity from 0.0 to 1.0, return only a number."
     if LLM_CHOICE.startswith("gpt"):
-        resp = openai.ChatCompletion.create(
+        resp = openai.chat.completions.create(
             model=LLM_CHOICE,
             messages=[{"role":"user","content":prompt}],
             temperature=0.0,
