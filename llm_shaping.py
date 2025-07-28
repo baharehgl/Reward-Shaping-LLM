@@ -17,6 +17,7 @@ llm_logs    = []     # to replay for CSV after training
 # Which model are we using right now?
 LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")
 openai.api_key = os.environ.get("OPENAI_API_KEY", "")
+#openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # If using Llama-3, prepare a local pipeline:
 _llama_pipe = None
