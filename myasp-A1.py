@@ -34,7 +34,7 @@ importlib.reload(llm_shaping)
 from llm_shaping import compute_potential, shaped_reward, llm_logs
 
 
-compute_potential.cache_clear()
+#compute_potential.cache_clear()
 llm_logs.clear()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
@@ -704,7 +704,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             env = EnvTimeSeriesfromRepo(ds_path)
 
             # Clear previous LLM cache & logs
-            compute_potential.cache_clear()
+            #compute_potential.cache_clear()
             llm_logs.clear()
 
             # Initialize cursor and state function
@@ -731,7 +731,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             env.rewardfnc = shaping_fn
 
             # SMOKE TEST: confirm shaping fires and logs
-            compute_potential.cache_clear()
+            #compute_potential.cache_clear()
             llm_logs.clear()
 
             # Force a valid cursor step
