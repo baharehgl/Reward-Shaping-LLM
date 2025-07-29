@@ -641,7 +641,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
     """
     # ───── φ(s) PRECOMPUTE & LOOKUP-MODE PATCH ───────────────────────
     import llm_shaping
-    from llm_shaping import compute_potential, llm_logs
+    from llm_shaping import _compute_api, llm_logs
     print("🔨 Precomputing unique windows via EnvTimeSeriesfromRepo…")
 
     # 1) Gather every window your env will see
@@ -669,9 +669,9 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                 all_windows[window] = None
 
     # 2) Call LLM once per unique window, filling in all_windows[w] = φ
-    print(f"ℹ️  Computing φ for {len(all_windows)} unique windows (this may take a while)…")
+    print(f"ℹ️  Computing φ via API for {len(all_windows)} unique windows (this may take a while)…")
     for w in all_windows:
-        all_windows[w] = compute_potential(w)
+        all_windows[w] = _compute_api(w)
 
     # 3) Swap out compute_potential for a simple lookup
     def lookup_potential(window_tuple):
