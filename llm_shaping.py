@@ -14,7 +14,7 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
-LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")  # or "gpt-4-0613" or "llama-3"
+LLM_CHOICE = os.getenv("LLM_CHOICE", "llama-3")  # gpt-3.5-turbo or "gpt-4-0613" or meta-llama/Llama-3-8B or microsoft/Phi-2
 
 # If using Llama-3:
 _llama_pipe = None
@@ -29,7 +29,7 @@ if LLM_CHOICE.startswith("llama-3"):
     )
 
 llm_logs = []
-@lru_cache(maxsize=10_000)
+@lru_cache(maxsize=100_000)
 def compute_potential(window_tuple):
     # Round all floats to reduce LLM API call variety
     window_tuple = tuple(round(x, 1) for x in window_tuple)
