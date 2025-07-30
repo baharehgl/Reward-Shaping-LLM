@@ -19,9 +19,11 @@ LLM_CHOICE = os.getenv("LLM_CHOICE", "llama-3")  # gpt-3.5-turbo or "gpt-4-0613"
 # If using Llama-3:
 _llama_pipe = None
 if LLM_CHOICE.startswith("llama-3"):
-    tok = AutoTokenizer.from_pretrained("meta-llama/Llama-3-70b-chat")
+    LLM_MODEL = "meta-llama/Meta-Llama-3-8B-Instruct"
+
+    tok = AutoTokenizer.from_pretrained(LLM_MODEL)
     mdl = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3-70b-chat", device_map="auto", torch_dtype=torch.float16
+        LLM_MODEL, device_map="auto", torch_dtype=torch.float16
     )
     _llama_pipe = pipeline(
         "text-generation", model=mdl, tokenizer=tok,
