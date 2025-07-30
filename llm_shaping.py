@@ -31,6 +31,8 @@ if LLM_CHOICE.startswith("llama-3"):
 llm_logs = []
 @lru_cache(maxsize=10_000)
 def compute_potential(window_tuple):
+    # Round all floats to reduce LLM API call variety
+    window_tuple = tuple(round(x, 1) for x in window_tuple)
     txt = ", ".join(f"{x:.2f}" for x in window_tuple)
     prompt = (
         f"Sensor readings: [{txt}]\n"
