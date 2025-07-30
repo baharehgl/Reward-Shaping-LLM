@@ -28,13 +28,14 @@ from env import EnvTimeSeriesfromRepo
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
+#from llm_shaping import shaped_reward, llm_logs
 import importlib
 import llm_shaping
 importlib.reload(llm_shaping)
 from llm_shaping import compute_potential, shaped_reward, llm_logs
 
 
-#compute_potential.cache_clear()
+compute_potential.cache_clear()
 llm_logs.clear()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
@@ -639,54 +640,6 @@ def train_wrapper(num_LP, num_AL, discount_factor):
     Smoke-tests one shaping step before running full training.
     Returns final validation metric (e.g., F1-score).
     """
-    # ───── φ(s) PRECOMPUTE & LOOKUP-MODE PATCH ───────────────────────
-    import llm_shaping
-    from llm_shaping import _compute_api, llm_logs
-    print("🔨 Precomputing unique windows via EnvTimeSeriesfromRepo…")
-
-    # 1) Gather every window your env will see
-    all_windows = {}
-    dataset_dirs = [
-        os.path.join(current_dir, "ydata-labeled-time-series-anomalies-v1_0", "A1Benchmark"),
-        # add more dataset roots here if needed
-    ]
-    for ds_path in dataset_dirs:
-        env = EnvTimeSeriesfromRepo(ds_path)
-        env.timeseries_curser_init = n_steps
-        for _ in range(env.datasetsize):
-            env.reset()
-            # env.states_list should be a list of np arrays shape (n_steps, 2)
-            for state in env.states_list:
-                if state is None:
-                    continue
-                # ensure it's a 2D array of shape (n_steps, something)
-                if not hasattr(state, "ndim") or state.ndim != 2:
-                    continue
-                if state.shape[0] != n_steps:
-                    continue
-                # extract the “value” column (column 0), quantize to 2 decimals
-                window = tuple(np.round(state[:, 0], 2))
-                all_windows[window] = None
-
-    # 2) Call LLM once per unique window, filling in all_windows[w] = φ
-    print(f"ℹ️  Computing φ via API for {len(all_windows)} unique windows (this may take a while)…")
-    for w in all_windows:
-        all_windows[w] = _compute_api(w)
-
-    # 3) Swap out compute_potential for a simple lookup
-    def lookup_potential(window_tuple):
-        key = tuple(np.round(window_tuple, 2))
-        phi = all_windows.get(key, 0.0)
-        # log for CSV export
-        llm_logs.append((window_tuple, phi))
-        return phi
-
-    llm_shaping.compute_potential = lookup_potential
-    llm_logs.clear()  # start fresh for the RL run
-    print("✅ φ-lookup ready; switching compute_potential to fast lookup.")
-    # ────────────────────────────────────────────────────────────────
-
-
     # 1) Prepare and train VAE on normal data
     data_directory = os.path.join(current_dir, "normal-data")
     x_train = load_normal_data(data_directory, n_steps)
@@ -709,7 +662,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             env = EnvTimeSeriesfromRepo(ds_path)
 
             # Clear previous LLM cache & logs
-            #compute_potential.cache_clear()
+            compute_potential.cache_clear()
             llm_logs.clear()
 
             # Initialize cursor and state function
@@ -736,7 +689,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             env.rewardfnc = shaping_fn
 
             # SMOKE TEST: confirm shaping fires and logs
-            #compute_potential.cache_clear()
+            compute_potential.cache_clear()
             llm_logs.clear()
 
             # Force a valid cursor step
@@ -781,6 +734,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             with sess.as_default():
                 episode_rewards, coef_history = q_learning(
                     env, sess, qlearn_estimator, target_estimator,
+
                     num_episodes=30,
                     num_epoches=10,
                     experiment_dir=experiment_dir,
@@ -955,4 +909,3 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 #train_wrapper(200, 10000, 0.96)
 train_wrapper(200, 1000, 0.96)
 #train_wrapper(200, 5000, 0.96)
-#train_wrapper(200, 10000, 0.96)
