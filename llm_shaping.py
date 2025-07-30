@@ -14,10 +14,30 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
-LLM_CHOICE = os.getenv("LLM_CHOICE", "llama-3")  # gpt-3.5-turbo or "gpt-4-0613" or meta-llama/Llama-3-8B or microsoft/Phi-2
+LLM_CHOICE = os.getenv("LLM_CHOICE", "phi-2")  # gpt-3.5-turbo or "gpt-4-0613" or Llama-3 or Phi-2
 
 # If using Llama-3:
 _llama_pipe = None
+
+# Load local model for Phi-2 or similar
+if LLM_CHOICE == "phi-2":
+    MODEL_NAME = "microsoft/phi-2"  # lightweight, permissive
+elif LLM_CHOICE.startswith("llama-3"):
+    MODEL_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
+else:
+    MODEL_NAME = None  # fallback to OpenAI
+
+if MODEL_NAME:
+    tok = AutoTokenizer.from_pretrained(MODEL_NAME)
+    mdl = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME, device_map="auto", torch_dtype=torch.float16
+    )
+    _llama_pipe = pipeline(
+        "text-generation", model=mdl, tokenizer=tok,
+        max_new_tokens=8, temperature=0.0, do_sample=False
+    )
+
+'''
 if LLM_CHOICE.startswith("llama-3"):
     LLM_MODEL = "meta-llama/Meta-Llama-3-8B-Instruct"
 
@@ -29,7 +49,7 @@ if LLM_CHOICE.startswith("llama-3"):
         "text-generation", model=mdl, tokenizer=tok,
         max_new_tokens=8, temperature=0.0, do_sample=False
     )
-
+'''
 llm_logs = []
 @lru_cache(maxsize=100_000)
 def compute_potential(window_tuple):
