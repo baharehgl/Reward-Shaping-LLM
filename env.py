@@ -123,7 +123,7 @@ class EnvTimeSeriesfromRepo():
         scaler = sklearn.preprocessing.MinMaxScaler()
         self.timeseries['value'] = scaler.fit_transform(self.timeseries[['value']])
         return self.timeseries
-
+'''
     def step(self, action):
         """
         Take a step in the environment.
@@ -133,6 +133,7 @@ class EnvTimeSeriesfromRepo():
         reward = self.rewardfnc(self.timeseries, self.timeseries_curser, action)
         # 2. Advance the time series cursor.
         self.timeseries_curser += 1
+
 
         if self.timeseries_curser >= self.timeseries['value'].size:
             done = 1
@@ -150,7 +151,58 @@ class EnvTimeSeriesfromRepo():
             self.timeseries_states = state
 
         return state, reward, done, []
+'''
 
+def step(self, action):
+    """
+    Take a step in the environment.
+    Returns a tuple: (state, reward, done, info)
+    """
+    # 1. Compute reward at the current cursor
+    reward = self.rewardfnc(self.timeseries,
+                            self.timeseries_curser,
+                            action)
+
+    # 2. Advance the cursor
+    self.timeseries_curser += 1
+
+    # 3. Check for terminal condition
+    if self.timeseries_curser >= self.timeseries['value'].size:
+        done = 1
+        # at terminal: return the last state twice (as in your original)
+        state = np.array([self.timeseries_states,
+                          self.timeseries_states])
+    else:
+        done = 0
+
+        # 4. Decide whether to call your RNN state‐fnc or hold the old state
+        #    Use the length of your current window to infer n_steps:
+        window_size = self.timeseries_states.shape[0]
+
+        if self.timeseries_curser < window_size:
+            # warm‐up period: keep the previous state
+            next_state = self.timeseries_states
+        else:
+            # now we have enough history, compute the real next state
+            next_state = self.statefnc(self.timeseries,
+                                      self.timeseries_curser,
+                                      self.timeseries_states,
+                                      action)
+
+        # 5. Only update if next_state is valid (not None)
+        if next_state is not None:
+            # if the returned state has an extra action dimension, pick the right slice
+            if isinstance(next_state, np.ndarray) and \
+               next_state.ndim > np.array(self.timeseries_states).ndim:
+                self.timeseries_states = next_state[action]
+            else:
+                self.timeseries_states = next_state
+
+        # 6. Expose the raw `state` that the agent sees
+        state = next_state
+
+    # 7. Return exactly the same signature
+    return state, reward, done, []
     def get_states_list(self):
         """
         Build and return a list of states for the current time series.
