@@ -397,7 +397,10 @@ def q_learning(env, sess, qlearn_estimator, target_estimator, num_episodes, num_
     for t in itertools.count():
         env.reset()
         env.states_list = [s for s in env.states_list if s is not None]
-        data = np.array(env.states_list).transpose(2, 0, 1).reshape(2, -1)[0].reshape(-1, n_steps)[:, -1].reshape(-1, 1)
+        #data = np.array(env.states_list).transpose(2, 0, 1).reshape(2, -1)[0].reshape(-1, n_steps)[:, -1].reshape(-1, 1)
+        states = [s[0] if isinstance(s, np.ndarray) and s.ndim == 3 else s for s in env.states_list]
+        states = np.array(states)  # shape: (num_samples, n_steps, 2)
+        data = states[:, -1, 0].reshape(-1, 1)  # last value of each state
         anomaly_score = model_warm.decision_function(data)
         pred_score = [-1 * s + 0.5 for s in anomaly_score]
         warm_samples = np.argsort(pred_score)[:5]
