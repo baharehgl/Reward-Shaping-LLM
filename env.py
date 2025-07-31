@@ -91,7 +91,8 @@ class EnvTimeSeriesfromRepo():
         self.timeseries = self.timeseries_repo[self.datasetidx]
         self.timeseries_curser = self.timeseries_curser_init
         self.timeseries_states = self.statefnc(self.timeseries, self.timeseries_curser)
-        self.states_list = self.get_states_list()
+        #self.states_list = self.get_states_list()
+        self.states_list = self.env.states_list
         return self.timeseries_states
 
     def reset_to(self, id):
@@ -104,7 +105,8 @@ class EnvTimeSeriesfromRepo():
         self.timeseries = self.timeseries_repo[self.datasetidx]
         self.timeseries_curser = self.timeseries_curser_init
         self.timeseries_states = self.statefnc(self.timeseries, self.timeseries_curser)
-        self.states_list = self.get_states_list()
+        #self.states_list = self.get_states_list()
+        self.states_list = self.env.states_list
         return self.timeseries_states
 
     def reset_getall(self):
