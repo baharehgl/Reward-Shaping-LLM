@@ -392,6 +392,19 @@ def q_learning(env, sess, qlearn_estimator, target_estimator, num_episodes, num_
         env.reset()
         env.states_list = [s for s in env.states_list if s is not None]
         data_train.extend(env.states_list)
+    #***************************
+    states = []
+    for s in env.states_list:
+        if isinstance(s, np.ndarray):
+            if s.ndim == 3:  # (2, n_steps, 2) — binary Q options
+                s = s[0]
+            if s.ndim == 2 and s.shape[1] == 2:
+                states.append(s)
+    states = np.array(states)
+
+    # Get last value from each sliding window
+    data = states[:, -1, 0].reshape(-1, 1)
+    #*******************************
     model_warm = WarmUp().warm_up_isolation_forest(outliers_fraction, data_train)
     lp_model = LabelSpreading()
     for t in itertools.count():
