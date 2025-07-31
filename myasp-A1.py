@@ -153,6 +153,30 @@ vae, encoder = build_vae(original_dim, latent_dim, intermediate_dim)
 
 #####################################################
 # State and Reward Functions.
+
+def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=None):
+    n_steps = 25  # Must match your config
+    values = timeseries['value']
+
+    if timeseries_curser < n_steps:
+        padded = [values.iloc[0]] * (n_steps - timeseries_curser) + list(values.iloc[:timeseries_curser])
+        state = [[v, 0] for v in padded[:-1]] + [[padded[-1], 1]]
+        return np.array(state, dtype='float32')
+
+    if previous_state is None or len(previous_state) != n_steps or np.array(previous_state).ndim != 2:
+        # fallback in case previous state is invalid or badly shaped
+        window = values.iloc[timeseries_curser - n_steps + 1: timeseries_curser + 1]
+        state = [[v, 0] for v in window[:-1]] + [[window.iloc[-1], 1]]
+        return np.array(state, dtype='float32')
+
+    # Valid previous state: shift and add new value
+    state0 = np.concatenate((previous_state[1:], [[values.iloc[timeseries_curser], 0]]), axis=0)
+    state1 = np.concatenate((previous_state[1:], [[values.iloc[timeseries_curser], 1]]), axis=0)
+    return np.array([state0, state1], dtype='float32')
+
+
+
+'''
 def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=None):
     if timeseries_curser == n_steps:
         state = []
@@ -168,7 +192,7 @@ def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=N
                                  [[timeseries['value'][timeseries_curser], 1]]))
         return np.array([state0, state1], dtype='float32')
     return None
-
+'''
 
 def RNNBinaryRewardFuc(timeseries, timeseries_curser, action=0, vae=None, dynamic_coef=1.0):
     if timeseries_curser >= n_steps:
