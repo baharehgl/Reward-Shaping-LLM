@@ -156,7 +156,7 @@ vae, encoder = build_vae(original_dim, latent_dim, intermediate_dim)
 
 
 
-
+'''
 def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=None):
     if timeseries_curser == n_steps:
         state = []
@@ -172,6 +172,43 @@ def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=N
                                  [[timeseries['value'][timeseries_curser], 1]]))
         return np.array([state0, state1], dtype='float32')
     return None
+'''
+def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=None, action=None):
+    """
+    Builds the next state (sliding window) for the RNN-based agent.
+
+    - For timeseries_curser < n_steps: pads with zeros to length n_steps.
+    - At timeseries_curser == n_steps: returns the first full window (shape [n_steps, 2]).
+    - For timeseries_curser > n_steps: returns two candidate windows (state0, state1) of shape [n_steps, 2],
+      stacked into a [2, n_steps, 2] array, where the last row flag is 0 or 1.
+    """
+    # Assume global n_steps is defined elsewhere
+    # 1) Warm-up: not enough history → pad
+    if timeseries_curser < n_steps:
+        pad_len = n_steps - timeseries_curser
+        pad = np.zeros((pad_len, 2), dtype='float32')
+        hist = np.array([
+            [timeseries['value'][i], 0]
+            for i in range(timeseries_curser)
+        ], dtype='float32')
+        return np.vstack([pad, hist])
+
+    # 2) Exactly full window: build a single [n_steps,2] array
+    if timeseries_curser == n_steps:
+        window = []
+        for i in range(timeseries_curser):
+            flag = 1 if i == timeseries_curser - 1 else 0
+            window.append([timeseries['value'][i], flag])
+        return np.array(window, dtype='float32')
+
+    # 3) After warm-up: sliding window with two action-based variants
+    # previous_state should be an array of shape [n_steps, 2]
+    base = np.array(previous_state[1:n_steps], dtype='float32')
+    # Append next value with flag 0 or 1
+    state0 = np.vstack([base, [timeseries['value'][timeseries_curser], 0]])
+    state1 = np.vstack([base, [timeseries['value'][timeseries_curser], 1]])
+    # Return shape [2, n_steps, 2]
+    return np.array([state0, state1], dtype='float32')
 
 
 def RNNBinaryRewardFuc(timeseries, timeseries_curser, action=0, vae=None, dynamic_coef=1.0):
