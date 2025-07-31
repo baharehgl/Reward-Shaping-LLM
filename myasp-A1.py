@@ -154,29 +154,9 @@ vae, encoder = build_vae(original_dim, latent_dim, intermediate_dim)
 #####################################################
 # State and Reward Functions.
 
-def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=None):
-    n_steps = 25  # Must match your config
-    values = timeseries['value']
-
-    if timeseries_curser < n_steps:
-        padded = [values.iloc[0]] * (n_steps - timeseries_curser) + list(values.iloc[:timeseries_curser])
-        state = [[v, 0] for v in padded[:-1]] + [[padded[-1], 1]]
-        return np.array(state, dtype='float32')
-
-    if previous_state is None or len(previous_state) != n_steps or np.array(previous_state).ndim != 2:
-        # fallback in case previous state is invalid or badly shaped
-        window = values.iloc[timeseries_curser - n_steps + 1: timeseries_curser + 1]
-        state = [[v, 0] for v in window[:-1]] + [[window.iloc[-1], 1]]
-        return np.array(state, dtype='float32')
-
-    # Valid previous state: shift and add new value
-    state0 = np.concatenate((previous_state[1:], [[values.iloc[timeseries_curser], 0]]), axis=0)
-    state1 = np.concatenate((previous_state[1:], [[values.iloc[timeseries_curser], 1]]), axis=0)
-    return np.array([state0, state1], dtype='float32')
 
 
 
-'''
 def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=None):
     if timeseries_curser == n_steps:
         state = []
@@ -192,7 +172,7 @@ def RNNBinaryStateFuc(timeseries, timeseries_curser, previous_state=[], action=N
                                  [[timeseries['value'][timeseries_curser], 1]]))
         return np.array([state0, state1], dtype='float32')
     return None
-'''
+
 
 def RNNBinaryRewardFuc(timeseries, timeseries_curser, action=0, vae=None, dynamic_coef=1.0):
     if timeseries_curser >= n_steps:
@@ -392,28 +372,14 @@ def q_learning(env, sess, qlearn_estimator, target_estimator, num_episodes, num_
         env.reset()
         env.states_list = [s for s in env.states_list if s is not None]
         data_train.extend(env.states_list)
-    #***************************
-    states = []
-    for s in env.states_list:
-        if isinstance(s, np.ndarray):
-            if s.ndim == 3:  # (2, n_steps, 2) — binary Q options
-                s = s[0]
-            if s.ndim == 2 and s.shape[1] == 2:
-                states.append(s)
-    states = np.array(states)
 
-    # Get last value from each sliding window
-    data = states[:, -1, 0].reshape(-1, 1)
-    #*******************************
     model_warm = WarmUp().warm_up_isolation_forest(outliers_fraction, data_train)
     lp_model = LabelSpreading()
     for t in itertools.count():
         env.reset()
         env.states_list = [s for s in env.states_list if s is not None]
-        #data = np.array(env.states_list).transpose(2, 0, 1).reshape(2, -1)[0].reshape(-1, n_steps)[:, -1].reshape(-1, 1)
-        states = [s[0] if isinstance(s, np.ndarray) and s.ndim == 3 else s for s in env.states_list]
-        states = np.array(states)  # shape: (num_samples, n_steps, 2)
-        data = states[:, -1, 0].reshape(-1, 1)  # last value of each state
+        data = np.array(env.states_list).transpose(2, 0, 1).reshape(2, -1)[0].reshape(-1, n_steps)[:, -1].reshape(-1, 1)
+
         anomaly_score = model_warm.decision_function(data)
         pred_score = [-1 * s + 0.5 for s in anomaly_score]
         warm_samples = np.argsort(pred_score)[:5]
