@@ -178,7 +178,7 @@ class EnvTimeSeriesfromRepo():
         return state, reward, done, []
 
 
-    
+
 
     def get_states_list(self):
         """
