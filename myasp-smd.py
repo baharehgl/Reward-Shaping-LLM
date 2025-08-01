@@ -29,6 +29,17 @@ from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 from sklearn.metrics import precision_recall_fscore_support, average_precision_score
 
+
+# ─── LLM shaping imports ─────────────────────────────────────────────────
+import importlib
+import llm_shaping
+importlib.reload(llm_shaping)
+from llm_shaping import compute_potential, shaped_reward, llm_logs
+# clear cache before each run
+compute_potential.cache_clear()
+llm_logs.clear()
+
+
 os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 gpus = tf.config.list_physical_devices('GPU')
 print("GPUs detected by TensorFlow:", gpus)
@@ -550,6 +561,136 @@ def convert_txt_to_csv(directory):
                 except Exception as e:
                     print("Error converting {}: {}".format(f, e))
 
+
+def train_wrapper(num_LP, num_AL, discount_factor):
+    """
+    Trains the RL agent on SMD with LLM-based potential shaping.
+    Returns final validation metrics (F1-score, AU-PR).
+    """
+    # 1) Prepare and train VAE on normal (train) data
+    train_dir = os.path.join(current_dir, "SMD", "ServerMachineDataset", "train")
+    x_train = load_normal_data(train_dir, n_steps)
+    vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
+    vae.fit(x_train, epochs=2, batch_size=32)
+    vae.save('vae_smd_model.h5')
+
+    # 2) Percentage splits & test flag
+    percentage = [1.0]
+    test = 0
+
+    for pct in percentage:
+        # Experiment naming
+        exp_name = f"SMD_LP{num_LP}_AL{num_AL}_d{discount_factor:.2f}"
+        experiment_dir = os.path.abspath(os.path.join("./exp", exp_name))
+        os.makedirs(experiment_dir, exist_ok=True)
+
+        # Instantiate environment for training
+        sensor_dir = os.path.join(current_dir, "SMD", "ServerMachineDataset", "test")
+        label_dir  = os.path.join(current_dir, "SMD", "ServerMachineDataset", "test_label")
+        convert_txt_to_csv(sensor_dir)
+        env = EnvTimeSeriesfromRepo(sensor_dir=sensor_dir, label_dir=label_dir)
+
+        # 3) Clear LLM cache & logs
+        compute_potential.cache_clear()
+        llm_logs.clear()
+
+        # 4) Initialize and reset
+        env.timeseries_curser_init = n_steps
+        _ = env.reset()
+        env.statefnc = RNNBinaryStateFuc
+
+        # 5) Define shaping reward function
+        def shaping_fn(ts, tc, a):
+            s  = ts['value'][tc - n_steps:tc].values
+            s2 = ts['value'][tc - n_steps + 1:tc + 1].values
+            phi0 = shaped_reward(
+                raw_reward=RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0, include_vae_penalty=True)[0],
+                s=s, s2=s2,
+                gamma=discount_factor
+            )
+            phi1 = shaped_reward(
+                raw_reward=RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0, include_vae_penalty=True)[1],
+                s=s, s2=s2,
+                gamma=discount_factor
+            )
+            return [phi0, phi1]
+        env.rewardfnc = shaping_fn
+
+        # 6) Smoke test
+        env.timeseries_curser = n_steps
+        ts_copy = env.timeseries.copy()
+        r0 = env.rewardfnc(ts_copy, n_steps, 0)
+        r1 = env.rewardfnc(ts_copy, n_steps, 1)
+        print("🚨 SMOKE TEST shaped rewards:", r0, r1)
+        print("🚨 SMOKE TEST llm_logs length:", len(llm_logs))
+        llm_logs.clear()
+
+        # 7) Load VAE weights for RL loop
+        vae = load_model('vae_smd_model.h5', custom_objects={'Sampling': Sampling}, compile=False)
+
+        # 8) Build TF session and estimators
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        from tensorflow.compat.v1.keras import backend as K
+        K.set_session(sess)
+        global_step = tf.Variable(0, name="global_step", trainable=False)
+        qlearn_estimator = Q_Estimator_Nonlinear(scope="qlearn", summaries_dir=experiment_dir, learning_rate=0.0003)
+        target_estimator = Q_Estimator_Nonlinear(scope="target")
+        sess.run(tf.compat.v1.global_variables_initializer())
+
+        # 9) Train and validate
+        with sess.as_default():
+            # 9a) Training
+            episode_rewards, coef_history = q_learning(
+                env, sess, qlearn_estimator, target_estimator,
+                num_episodes=EPISODES,
+                num_epoches=10,
+                experiment_dir=experiment_dir,
+                replay_memory_size=500000,
+                replay_memory_init_size=1500,
+                update_target_estimator_every=10,
+                epsilon_start=1.0,
+                epsilon_end=0.1,
+                epsilon_decay_steps=500000,
+                discount_factor=discount_factor,
+                batch_size=128,
+                num_LabelPropagation=num_LP,
+                num_active_learning=num_AL,
+                test=test,
+                vae_model=vae,
+                include_vae_penalty=True
+            )
+            # 9b) Validation (no shaping)
+            env_test = EnvTimeSeriesfromRepo(sensor_dir=sensor_dir, label_dir=label_dir)
+            env_test.timeseries_curser_init = n_steps
+            _ = env_test.reset()
+            env_test.statefnc = RNNBinaryStateFuc
+            env_test.rewardfnc = RNNBinaryRewardFucTest
+            avg_f1, avg_aupr = q_learning_validator(
+                env_test, qlearn_estimator,
+                int(env.datasetsize * (1 - validation_separate_ratio)),
+                experiment_dir
+            )
+
+            # 9c) Dump LLM potentials
+            import csv
+            os.makedirs(experiment_dir, exist_ok=True)
+            dump_path = os.path.join(experiment_dir, "llm_potentials_smd.csv")
+            with open(dump_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["window", "phi"])
+                for win, phi in llm_logs:
+                    win_str = " ".join(f"{v:.2f}" for v in win)
+                    writer.writerow([win_str, phi])
+
+        # 10) Save plots and return metrics
+        save_plots(experiment_dir, episode_rewards, coef_history)
+        return avg_f1, avg_aupr
+
+
+
+
+'''
 def train_wrapper(num_LP, num_AL, discount_factor):
     # Use sensor files from the train folder for VAE training.
     train_directory = os.path.join(current_dir, "SMD", "ServerMachineDataset", "train")
@@ -613,6 +754,8 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                                                     experiment_dir)
         save_plots(experiment_dir, episode_rewards, coef_history)
         return final_metric, final_aupr
+        
+'''
 
 # Uncomment one of the following calls to run training with different hyperparameters.
 # train_wrapper(100, 1000, 0.92)
