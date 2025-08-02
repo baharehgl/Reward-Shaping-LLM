@@ -625,17 +625,27 @@ def train_wrapper(num_LP, num_AL, discount_factor):
         print("🚨 SMOKE TEST llm_logs length:", len(llm_logs))
         llm_logs.clear()
 
-        # 7) Load VAE weights for RL loop
-        vae = load_model('vae_smd_model.h5', custom_objects={'Sampling': Sampling}, compile=False)
-
-        # 8) Build TF session and estimators
+        # ─── 7) Build a fresh TF graph & session ────────────────────────────────
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         from tensorflow.compat.v1.keras import backend as K
         K.set_session(sess)
+
+        # ─── 8) Reload your saved VAE into this graph/session ───────────────────
+        vae = load_model('vae_smd_model.h5',
+                         custom_objects={'Sampling': Sampling},
+                         compile=False)
+
+        # ─── 9) Now build your Q-network estimators and global_step ────────────
         global_step = tf.Variable(0, name="global_step", trainable=False)
-        qlearn_estimator = Q_Estimator_Nonlinear(scope="qlearn", summaries_dir=experiment_dir, learning_rate=0.0003)
+        qlearn_estimator = Q_Estimator_Nonlinear(
+            scope="qlearn",
+            summaries_dir=experiment_dir,
+            learning_rate=0.0003
+        )
         target_estimator = Q_Estimator_Nonlinear(scope="target")
+
+        # Initialize all variables (VAE weights are already loaded into the graph)
         sess.run(tf.compat.v1.global_variables_initializer())
 
         # 9) Train and validate
