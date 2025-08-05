@@ -47,15 +47,15 @@ print("GPUs detected by TensorFlow:", gpus)
 ############################
 # Macros and Hyperparameters.
 DATAFIXED = 0               # whether target is fixed to a single time series
-EPISODES = 3               # number of episodes
+EPISODES = 20               # number of episodes
 DISCOUNT_FACTOR = 0.5       # reward discount factor
 EPSILON = 0.5               # epsilon-greedy parameter
 EPSILON_DECAY = 1.00        # epsilon decay
 
 # Extrinsic reward values.
-TN_Value = 1    # True Negative
+TN_Value = 5    # True Negative
 TP_Value = 10    # True Positive
-FP_Value = -1   # False Positive
+FP_Value = -5   # False Positive
 FN_Value = -10   # False Negative
 
 NOT_ANOMALY = 0
