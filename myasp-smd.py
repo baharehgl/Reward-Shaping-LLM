@@ -508,6 +508,43 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
         aupr_all.append(aupr)
         print("Episode {}: Precision:{}, Recall:{}, F1-score:{}, AU-PR:{}".format(i_episode+1, precision, recall, f1, aupr))
         rec_file.write("Episode {}: Precision:{}, Recall:{}, F1-score:{}, AU-PR:{}\n".format(i_episode+1, precision, recall, f1, aupr))
+
+        if plot:
+            # --- 1) simple 3-row validation panel ---
+            f, axarr = plt.subplots(3, sharex=True)
+            axarr[0].plot(ts_values);
+            axarr[0].set_title('Time Series')
+            axarr[1].plot(predictions, 'g');
+            axarr[1].set_title('Predictions')
+            axarr[2].plot(ground_truths, 'r');
+            axarr[2].set_title('Ground Truth')
+            plt.tight_layout()
+            plt.savefig(os.path.join(record_dir, f"validation_episode_{i_episode}.svg"), format="svg")
+            plt.close(f)
+
+            # --- 2) 2×2 detection panel (like A1) ---
+            def plot_detection(ax, ts, preds, gts, title):
+                ax.plot(ts, label="Signal")
+                ax.plot(preds, label="Detected")
+                for t in np.where(gts)[0]:
+                    ax.axvspan(t - 0.5, t + 0.5, color="green", alpha=0.2)
+                for t in np.where(preds)[0]:
+                    ax.axvspan(t - 0.5, t + 0.5, color="gray", alpha=0.2)
+                ax.set_title(title)
+                ax.legend(loc="upper left")
+
+            fig, axs = plt.subplots(2, 2, figsize=(10, 5))
+            ts = np.array(ts_values)
+            preds = np.array(predictions)
+            gts = np.array(ground_truths)
+            plot_detection(axs[0, 0], ts, np.zeros_like(ts), gts, "No Forecast")
+            plot_detection(axs[0, 1], ts, preds, gts, "With Forecast")
+            plot_detection(axs[1, 0], ts, np.zeros_like(ts), gts, "No Forecast")
+            plot_detection(axs[1, 1], ts, preds, gts, "With Forecast")
+            plt.tight_layout()
+            plt.savefig(os.path.join(record_dir, f"detection_episode_{i_episode}.svg"), format="svg")
+            plt.close(fig)
+        '''
         if plot:
             f, axarr = plt.subplots(4, sharex=True)
             axarr[0].plot(ts_values)
@@ -520,13 +557,14 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             axarr[3].set_title('AU-PR')
             plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
             plt.close(f)
+            '''
     rec_file.close()
     avg_f1 = np.mean(f1_all)
     avg_aupr = np.mean(aupr_all)
     print("Average F1-score over {} episodes: {}".format(num_episodes, avg_f1))
     print("Average AU-PR over {} episodes: {}".format(num_episodes, avg_aupr))
     return avg_f1, avg_aupr
-
+'''
 def save_plots(experiment_dir, episode_rewards, coef_history):
     plot_dir = os.path.join(experiment_dir, "SMD-plots")
     if not os.path.exists(plot_dir):
@@ -545,6 +583,27 @@ def save_plots(experiment_dir, episode_rewards, coef_history):
     plt.title("Dynamic Coefficient Evolution")
     plt.savefig(os.path.join(plot_dir, "dynamic_coef_curve.png"))
     plt.close()
+'''
+def save_plots(experiment_dir, episode_rewards, coef_history):
+    plot_dir = os.path.join(experiment_dir, "SMD-plots")
+    os.makedirs(plot_dir, exist_ok=True)
+
+    # reward curve
+    plt.figure()
+    plt.plot(episode_rewards, marker='o')
+    plt.xlabel("Episode"); plt.ylabel("Reward")
+    plt.title("Training Reward Curve")
+    plt.savefig(os.path.join(plot_dir, "reward_curve.svg"), format="svg")
+    plt.close()
+
+    # lambda (dynamic_coef) curve
+    plt.figure()
+    plt.plot(coef_history, marker='s')
+    plt.xlabel("Episode"); plt.ylabel("Dynamic Coefficient")
+    plt.title("Lambda Evolution")
+    plt.savefig(os.path.join(plot_dir, "lambda_curve.svg"), format="svg")
+    plt.close()
+
 
 def convert_txt_to_csv(directory):
     files = os.listdir(directory)
@@ -682,7 +741,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                 experiment_dir
             )
 
-            # 9c) Dump LLM potentials
+            # ─── 9c) Dump LLM potentials ────────────────────────────────────────
             import csv
             os.makedirs(experiment_dir, exist_ok=True)
             dump_path = os.path.join(experiment_dir, "llm_potentials_smd.csv")
@@ -693,10 +752,43 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                     win_str = " ".join(f"{v:.2f}" for v in win)
                     writer.writerow([win_str, phi])
 
-        # 10) Save plots and return metrics
-        save_plots(experiment_dir, episode_rewards, coef_history)
-        return avg_f1, avg_aupr
+            # ─── 10) LLM diagnostics plots ─────────────────────────────────────
+            import pandas as pd
+            phis_df = pd.read_csv(dump_path)
+            phis = phis_df["phi"].values
+            plots_dir = os.path.join(experiment_dir, "SMD-plots")
+            os.makedirs(plots_dir, exist_ok=True)
 
+            # 10a) Φ(s) time series
+            plt.figure()
+            plt.plot(phis, marker='.')
+            plt.title("LLM Potential Φ(s) over time")
+            plt.xlabel("Window index");
+            plt.ylabel("Φ(s)")
+            plt.savefig(os.path.join(plots_dir, "phi_timeseries.svg"), format="svg")
+            plt.close()
+
+            # 10b) Φ(s) histogram
+            plt.figure()
+            plt.hist(phis, bins=50)
+            plt.title("Histogram of Φ(s)")
+            plt.xlabel("Φ(s)");
+            plt.ylabel("Count")
+            plt.savefig(os.path.join(plots_dir, "phi_histogram.svg"), format="svg")
+            plt.close()
+
+            # 10c) Φ(s) CDF / distribution
+            plt.figure()
+            plt.hist(phis, bins=50, density=True, cumulative=True)
+            plt.title("CDF of Φ(s)")
+            plt.xlabel("Φ(s)");
+            plt.ylabel("Cumulative density")
+            plt.savefig(os.path.join(plots_dir, "phi_distribution.svg"), format="svg")
+            plt.close()
+
+            # ─── 11) Save training curves and return metrics ───────────────────
+            save_plots(experiment_dir, episode_rewards, coef_history)
+            return avg_f1, avg_aupr
 
 
 
