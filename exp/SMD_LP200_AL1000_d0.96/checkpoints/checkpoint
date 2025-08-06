@@ -1,0 +1,2 @@
+model_checkpoint_path: "C:\\Users\\robotics\\Documents\\GitHub\\Reward-Shaping-LLM\\exp\\SMD_LP200_AL1000_d0.96\\checkpoints\\model"
+all_model_checkpoint_paths: "C:\\Users\\robotics\\Documents\\GitHub\\Reward-Shaping-LLM\\exp\\SMD_LP200_AL1000_d0.96\\checkpoints\\model"
