@@ -14,7 +14,7 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
-LLM_CHOICE = os.getenv("LLM_CHOICE", "llama-3")  # gpt-3.5-turbo or "gpt-4-0613" or llama-3 or Phi-2
+LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-4")  # gpt-3.5-turbo or "gpt-4-0613" or llama-3 or phi-2
 
 # If using Llama-3:
 _llama_pipe = None
