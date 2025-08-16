@@ -51,8 +51,8 @@ EPSILON_DECAY = 1.00  # epsilon decay
 # Extrinsic reward values (heuristic):
 TN_Value = 1  # True Negative
 TP_Value = 5  # True Positive
-FP_Value = -3  # False Positive
-FN_Value = -6  # False Negative
+FP_Value = -1  # False Positive
+FN_Value = -5  # False Negative
 
 NOT_ANOMALY = 0
 ANOMALY = 1
@@ -715,38 +715,19 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 
             # Assign reward function with correct gamma
             def shaping_fn(ts, tc, a):
-                """
-                PBRS with action-sensitive φ:
-                  r' = r + γ φ(s') − φ(s)
-                s  : current window as (value, flag)
-                s' : next window differs in the LAST flag depending on action (0 vs 1)
-                """
-
-                # --- 1) Build current window s as 2D (value, flag) ---
-                cur_vals = ts['value'][tc - n_steps:tc].values
-                # If you don't track history of actions, set past flags to 0 (fine for PBRS)
-                cur_flags = np.zeros_like(cur_vals)
-                s_cur = np.stack([cur_vals, cur_flags], axis=1)  # shape [n_steps, 2]
-
-                # --- 2) Build the two candidate next windows s' (only last flag differs) ---
-                next_vals = ts['value'][tc - n_steps + 1: tc + 1].values
-                base_flags = np.zeros_like(next_vals)
-
-                s_next0 = np.stack([next_vals, base_flags.copy()], axis=1)  # action 0 → last flag = 0
-                s_next0[-1, 1] = 0
-
-                s_next1 = np.stack([next_vals, base_flags.copy()], axis=1)  # action 1 → last flag = 1
-                s_next1[-1, 1] = 1
-
-                # --- 3) Get raw extrinsic rewards for each action (your existing function) ---
-                raw0 = RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0)[0]
-                raw1 = RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0)[1]
-
-                # --- 4) Apply potential-based shaping with action-specific s' ---
-                r0 = shaped_reward(raw0, s_cur, s_next0, gamma=discount_factor)
-                r1 = shaped_reward(raw1, s_cur, s_next1, gamma=discount_factor)
-
-                return [r0, r1]
+                phi0 = shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 0, vae, dynamic_coef=10.0)[0],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=discount_factor
+                )
+                phi1 = shaped_reward(
+                    raw_reward=RNNBinaryRewardFuc(ts, tc, 1, vae, dynamic_coef=10.0)[1],
+                    s=ts['value'][tc - n_steps:tc].values,
+                    s2=ts['value'][tc - n_steps + 1:tc + 1].values,
+                    gamma=discount_factor
+                )
+                return [phi0, phi1]
 
             env.rewardfnc = shaping_fn
 
