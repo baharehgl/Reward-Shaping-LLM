@@ -51,8 +51,8 @@ EPSILON_DECAY = 1.00  # epsilon decay
 # Extrinsic reward values (heuristic):
 TN_Value = 1  # True Negative
 TP_Value = 5  # True Positive
-FP_Value = -1  # False Positive
-FN_Value = -5  # False Negative
+FP_Value = -3  # False Positive
+FN_Value = -6  # False Negative
 
 NOT_ANOMALY = 0
 ANOMALY = 1
