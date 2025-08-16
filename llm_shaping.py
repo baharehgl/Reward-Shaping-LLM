@@ -16,9 +16,9 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("You must export OPENAI_API_KEY before running this script.")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
-LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")  # e.g. "gpt-4o-mini", "gpt-4o", "llama-3", "phi-2"
-PHI_SCALE = float(os.getenv("PHI_SCALE", "1.0"))       # optional scaling of φ(s)
-ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2")) # rounding before caching
+LLM_CHOICE  = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")  # e.g. "gpt-4o", "llama-3", "phi-2"
+PHI_SCALE   = float(os.getenv("PHI_SCALE", "1.0"))      # optional scaling of φ(s)
+ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2"))  # rounding before caching
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local HF pipeline (for llama/phi) if requested
@@ -28,7 +28,6 @@ MODEL_NAME = None
 if LLM_CHOICE == "phi-2":
     MODEL_NAME = "microsoft/phi-2"
 elif LLM_CHOICE.startswith("llama-3"):
-    # Change this to your local path or HF model id as needed:
     MODEL_NAME = os.path.expanduser("~/llama-models/Llama-3.2-3B")
 
 if MODEL_NAME:
@@ -43,7 +42,7 @@ if MODEL_NAME:
         max_new_tokens=16,
         temperature=0.0,
         do_sample=False,
-        return_full_text=False,  # IMPORTANT: don't echo the prompt
+        return_full_text=False,  # don't echo the prompt
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,63 +54,46 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 def _parse_severity(raw: str) -> float:
-    """
-    Prefer strict JSON. If that fails, take the LAST number in the string
-    (avoids grabbing the '0.0' from '0.0–1.0' scale text).
-    """
+    """Strict JSON first, else fallback to the LAST number (avoids grabbing '0.0' from '0.0–1.0')."""
     raw = raw.strip()
     try:
         d = json.loads(raw)
-        val = float(d["severity"])
-        return _clamp01(val)
+        return _clamp01(float(d["severity"]))
     except Exception:
-        pass
-    nums = _num_regex.findall(raw)
-    if not nums:
-        raise ValueError(f"Could not extract number from LLM output: {raw!r}")
-    return _clamp01(float(nums[-1]))
+        nums = _num_regex.findall(raw)
+        if not nums:
+            raise ValueError(f"Could not extract number from LLM output: {raw!r}")
+        return _clamp01(float(nums[-1]))
 
 def _to_nested_tuple(win) -> tuple:
     """
-    Convert a window into a hashable nested tuple with rounding.
-    Supports:
-      - 1D: shape (n_steps,)
-      - 2D: shape (n_steps, 2)  # (value, flag)
+    Make a hashable nested tuple with rounding.
+      - 1D input -> (v1, v2, ...)
+      - 2D input (n_steps, 2) -> ((v1,f1), (v2,f2), ...)
     """
     arr = np.asarray(win)
     if arr.ndim == 1:
         arr = np.round(arr.astype(float), ROUND_DIGITS)
         return tuple(float(x) for x in arr.tolist())
-    elif arr.ndim == 2:
+    elif arr.ndim == 2 and arr.shape[1] == 2:
         arr = np.round(arr.astype(float), ROUND_DIGITS)
-        # tuple of (value, flag) pairs
         return tuple((float(v), float(f)) for v, f in arr.tolist())
     else:
-        # flatten anything else deterministically
         arr = np.round(arr.astype(float).flatten(), ROUND_DIGITS)
         return tuple(float(x) for x in arr.tolist())
 
 def _format_window_for_prompt(nested: tuple) -> str:
-    """
-    Pretty-print nested tuple for the prompt.
-    - If elements are pairs -> "(v,f)" comma-separated
-    - Else -> "v" comma-separated
-    """
+    """Pretty string: '(v,f)' when 2D, else 'v' comma-separated."""
     if len(nested) and isinstance(nested[0], tuple) and len(nested[0]) == 2:
         return ", ".join(f"({v:.2f},{int(f)})" for (v, f) in nested)
-    else:
-        return ", ".join(f"{float(x):.2f}" for x in nested)
+    return ", ".join(f"{float(x):.2f}" for x in nested)
 
 def _build_messages_for_gpt(txt: str):
-    """
-    Ask for severity on (value,flag) windows; force JSON only.
-    """
     system = (
         "You are an anomaly rater. "
         "Return ONLY valid JSON with a single key 'severity' whose value is a decimal in [0.0, 1.0]. "
         "No prose. No explanation."
     )
-    # Few-shot encourages spread and teaches (value,flag)
     user = (
         "Rate anomaly severity of the sliding window on a 0.0–1.0 scale.\n"
         "Each item is (value,flag), where flag reflects the agent's chosen label at that step (0=normal, 1=anomaly).\n"
@@ -129,13 +111,10 @@ def _build_messages_for_gpt(txt: str):
 llm_logs = []
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LLM-backed potential φ(s)  (action-sensitive via (value,flag) input)
+# LLM-backed potential φ(s) — cached on a normalized, hashable key
 # ─────────────────────────────────────────────────────────────────────────────
 @lru_cache(maxsize=100_000)
 def _compute_potential_cached(nested_window: tuple) -> float:
-    """
-    Core cached worker. `nested_window` is a hashable nested tuple produced by _to_nested_tuple.
-    """
     txt = _format_window_for_prompt(nested_window)
 
     if LLM_CHOICE.startswith("gpt"):
@@ -168,11 +147,26 @@ def _compute_potential_cached(nested_window: tuple) -> float:
     return score
 
 def compute_potential(window) -> float:
-    """
-    Public entry-point: accepts 1D or 2D arrays/lists, converts to nested tuple, and uses cache.
-    """
+    """Public entry-point. Accepts 1D values or 2D (value,flag) windows."""
     nested = _to_nested_tuple(window)
     return _compute_potential_cached(nested)
+
+# ── Backward compatibility: expose .cache_clear() / .cache_info() on compute_potential
+def _compat_cache_clear():
+    _compute_potential_cached.cache_clear()
+
+def _compat_cache_info():
+    return _compute_potential_cached.cache_info()
+
+compute_potential.cache_clear = _compat_cache_clear
+compute_potential.cache_info  = _compat_cache_info
+
+def clear_phi_cache():
+    """Explicit helper your code can call instead of touching .cache_clear()."""
+    _compute_potential_cached.cache_clear()
+    # also clear any logs if you usually do that alongside
+    # (comment out if you want to keep the logs)
+    # llm_logs.clear()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Potential-based shaping: r' = r + γ φ(s') − φ(s)
@@ -180,10 +174,10 @@ def compute_potential(window) -> float:
 def shaped_reward(raw_reward, s, s2, gamma):
     """
     s  : current window (1D values or 2D (value,flag))
-    s2 : *action-specific* next window (must differ in the last flag for action 0 vs 1)
+    s2 : action-specific next window (must differ in the last flag for action 0 vs 1)
     """
-    φ_s  = compute_potential(s)
-    φ_s2 = compute_potential(s2)
-    total = raw_reward + gamma * φ_s2 - φ_s
-    print(f"[DEBUG SHAPING] φ(s)={φ_s:.3f}, φ(s')={φ_s2:.3f}, raw={raw_reward:.3f} → total={total:.3f}")
+    phi_s  = compute_potential(s)
+    phi_s2 = compute_potential(s2)
+    total = raw_reward + gamma * phi_s2 - phi_s
+    print(f"[DEBUG SHAPING] φ(s)={phi_s:.3f}, φ(s')={phi_s2:.3f}, raw={raw_reward:.3f} → total={total:.3f}")
     return total
