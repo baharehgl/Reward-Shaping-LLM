@@ -2,9 +2,10 @@
 import os
 import json
 import re
-import openai
 from functools import lru_cache
 
+import numpy as np
+import openai
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
@@ -17,7 +18,7 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 LLM_CHOICE = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")  # e.g. "gpt-4o-mini", "gpt-4o", "llama-3", "phi-2"
 PHI_SCALE = float(os.getenv("PHI_SCALE", "1.0"))       # optional scaling of φ(s)
-ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2")) # rounding before caching (to avoid cache collisions)
+ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2")) # rounding before caching
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local HF pipeline (for llama/phi) if requested
@@ -48,28 +49,6 @@ if MODEL_NAME:
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilities
 # ─────────────────────────────────────────────────────────────────────────────
-def _build_messages(txt: str):
-    """
-    Construct strict messages so GPT returns ONLY a JSON object: {"severity": <0..1>}.
-    """
-    system = (
-        "You are an anomaly rater. "
-        "Return ONLY valid JSON with a single key 'severity' whose value is a decimal between 0.0 and 1.0. "
-        "No prose. No explanation."
-    )
-    # Few-shot to encourage spread (helps GPT avoid collapsing to 0.0)
-    examples = (
-        "Examples:\n"
-        "  Sensor readings: [0.0, 0.0, 0.0, 0.0, ...] -> {\"severity\": 0.00}\n"
-        "  Sensor readings: [0.0, 0.0, 0.0, 5.0, 5.0, ...] -> {\"severity\": 0.75}\n\n"
-        "Now rate strictly in JSON:\n"
-        f"Sensor readings: [{txt}]"
-    )
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": examples},
-    ]
-
 _num_regex = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
 
 def _clamp01(x: float) -> float:
@@ -78,39 +57,89 @@ def _clamp01(x: float) -> float:
 def _parse_severity(raw: str) -> float:
     """
     Prefer strict JSON. If that fails, take the LAST number in the string
-    (avoids grabbing the '0.0' from the '0.0–1.0' scale text).
+    (avoids grabbing the '0.0' from '0.0–1.0' scale text).
     """
     raw = raw.strip()
-    # Try JSON
     try:
         d = json.loads(raw)
         val = float(d["severity"])
         return _clamp01(val)
     except Exception:
         pass
-    # Fallback: last number
     nums = _num_regex.findall(raw)
     if not nums:
         raise ValueError(f"Could not extract number from LLM output: {raw!r}")
     return _clamp01(float(nums[-1]))
 
+def _to_nested_tuple(win) -> tuple:
+    """
+    Convert a window into a hashable nested tuple with rounding.
+    Supports:
+      - 1D: shape (n_steps,)
+      - 2D: shape (n_steps, 2)  # (value, flag)
+    """
+    arr = np.asarray(win)
+    if arr.ndim == 1:
+        arr = np.round(arr.astype(float), ROUND_DIGITS)
+        return tuple(float(x) for x in arr.tolist())
+    elif arr.ndim == 2:
+        arr = np.round(arr.astype(float), ROUND_DIGITS)
+        # tuple of (value, flag) pairs
+        return tuple((float(v), float(f)) for v, f in arr.tolist())
+    else:
+        # flatten anything else deterministically
+        arr = np.round(arr.astype(float).flatten(), ROUND_DIGITS)
+        return tuple(float(x) for x in arr.tolist())
+
+def _format_window_for_prompt(nested: tuple) -> str:
+    """
+    Pretty-print nested tuple for the prompt.
+    - If elements are pairs -> "(v,f)" comma-separated
+    - Else -> "v" comma-separated
+    """
+    if len(nested) and isinstance(nested[0], tuple) and len(nested[0]) == 2:
+        return ", ".join(f"({v:.2f},{int(f)})" for (v, f) in nested)
+    else:
+        return ", ".join(f"{float(x):.2f}" for x in nested)
+
+def _build_messages_for_gpt(txt: str):
+    """
+    Ask for severity on (value,flag) windows; force JSON only.
+    """
+    system = (
+        "You are an anomaly rater. "
+        "Return ONLY valid JSON with a single key 'severity' whose value is a decimal in [0.0, 1.0]. "
+        "No prose. No explanation."
+    )
+    # Few-shot encourages spread and teaches (value,flag)
+    user = (
+        "Rate anomaly severity of the sliding window on a 0.0–1.0 scale.\n"
+        "Each item is (value,flag), where flag reflects the agent's chosen label at that step (0=normal, 1=anomaly).\n"
+        "Output EXACTLY: {\"severity\": number}.\n\n"
+        "Examples:\n"
+        "  Window: [(0.00,0), (0.00,0), (0.00,0), (0.00,0)] -> {\"severity\": 0.00}\n"
+        "  Window: [(0.00,0), (0.00,0), (4.50,1), (4.80,1)] -> {\"severity\": 0.75}\n\n"
+        f"Window: [{txt}]"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
 llm_logs = []
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LLM-backed potential φ(s)
+# LLM-backed potential φ(s)  (action-sensitive via (value,flag) input)
 # ─────────────────────────────────────────────────────────────────────────────
 @lru_cache(maxsize=100_000)
-def compute_potential(window_tuple):
+def _compute_potential_cached(nested_window: tuple) -> float:
     """
-    Returns φ(s) ∈ [0,1] for a window s using an LLM.
-    Uses strict JSON for GPT models; robust parsing fallback otherwise.
+    Core cached worker. `nested_window` is a hashable nested tuple produced by _to_nested_tuple.
     """
-    # Round to reduce cache key explosion but keep enough resolution
-    window_tuple = tuple(round(float(x), ROUND_DIGITS) for x in window_tuple)
-    txt = ", ".join(f"{x:.2f}" for x in window_tuple)
+    txt = _format_window_for_prompt(nested_window)
 
     if LLM_CHOICE.startswith("gpt"):
-        messages = _build_messages(txt)
+        messages = _build_messages_for_gpt(txt)
         resp = openai.chat.completions.create(
             model=LLM_CHOICE,
             messages=messages,
@@ -123,29 +152,38 @@ def compute_potential(window_tuple):
             raise RuntimeError(
                 f"LLM_CHOICE={LLM_CHOICE!r} requires a local HF pipeline, but none is initialized."
             )
-        # Instruct local model to output JSON too
         prompt = (
             "You are an anomaly rater. "
             "Return ONLY valid JSON: {\"severity\": <0..1>} with no extra text.\n"
-            f"Sensor readings: [{txt}]"
+            "Each item is (value,flag), where flag is 0=normal, 1=anomaly.\n"
+            f"Window: [{txt}]"
         )
         raw = _llama_pipe(prompt)[0]["generated_text"]
 
     score = _parse_severity(raw)
-
-    # Optional scaling (if you find GPT's range too narrow)
     if PHI_SCALE != 1.0:
         score = _clamp01(score * PHI_SCALE)
 
-    llm_logs.append((window_tuple, score))
+    llm_logs.append((nested_window, score))
     return score
+
+def compute_potential(window) -> float:
+    """
+    Public entry-point: accepts 1D or 2D arrays/lists, converts to nested tuple, and uses cache.
+    """
+    nested = _to_nested_tuple(window)
+    return _compute_potential_cached(nested)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Potential-based shaping: r' = r + γ φ(s') − φ(s)
 # ─────────────────────────────────────────────────────────────────────────────
 def shaped_reward(raw_reward, s, s2, gamma):
-    φ_s  = compute_potential(tuple(s))
-    φ_s2 = compute_potential(tuple(s2))
+    """
+    s  : current window (1D values or 2D (value,flag))
+    s2 : *action-specific* next window (must differ in the last flag for action 0 vs 1)
+    """
+    φ_s  = compute_potential(s)
+    φ_s2 = compute_potential(s2)
     total = raw_reward + gamma * φ_s2 - φ_s
     print(f"[DEBUG SHAPING] φ(s)={φ_s:.3f}, φ(s')={φ_s2:.3f}, raw={raw_reward:.3f} → total={total:.3f}")
     return total
