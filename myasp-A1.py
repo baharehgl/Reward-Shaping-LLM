@@ -11,6 +11,11 @@ import time
 from scipy import stats
 import tensorflow as tf
 
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+
+
 tf.compat.v1.disable_eager_execution()
 
 from mpl_toolkits.mplot3d import axes3d
@@ -606,49 +611,46 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             plt.close()
             '''
 
+            ts = np.array(ts_values, dtype=float)
+            gts = np.array(ground_truths, dtype=int)  # 0/1 ground-truth anomalies
+            preds = np.array(predictions, dtype=int)  # 0/1 detected anomalies
 
+            fig, ax = plt.subplots(figsize=(12, 4))
 
-            f, axarr = plt.subplots(3, sharex=True)
-            axarr[0].plot(ts_values)
-            axarr[0].set_title('Time Series')
-            axarr[1].plot(predictions, color='g')
-            axarr[1].set_title('Predictions')
-            axarr[2].plot(ground_truths, color='r')
-            axarr[2].set_title('Ground Truth')
-            #plt.savefig(os.path.join(record_dir, "validation_episode_{}.png".format(i_episode)))
-            plt.savefig(os.path.join(record_dir, f"validation_episode_{i_episode}.svg"), format="svg")
-            plt.close(f)
+            # 1) Original signal
+            ax.plot(ts, lw=1.2, color="#1f77b4", label="Signal")
 
-            # ─── 2×2 Detection Panel ──────────────────────────────────────────
-            # helper function, put this at top of file once:
-            def plot_detection(ts, pred, true_anom, det_anom, title, ax):
-                ax.plot(ts, label="Original signal", linewidth=1)
-                ax.plot(pred, label="Forecast signal", linewidth=1)
-                for t in np.where(true_anom)[0]:
-                    ax.axvspan(t - 0.5, t + 0.5, color="green", alpha=0.2)  # true
-                for t in np.where(det_anom)[0]:
-                    ax.axvspan(t - 0.5, t + 0.5, color="gray", alpha=0.2)  # detected
-                ax.set_title(title)
-                ax.legend(loc="upper left")
+            # 2) True anomalies as translucent green spans
+            true_idx = np.where(gts == 1)[0]
+            for t in true_idx:
+                ax.axvspan(t - 0.5, t + 0.5, color="#2ca02c", alpha=0.25)
 
-            # build 2×2 figure
-            fig, axs = plt.subplots(2, 2, figsize=(10, 5))
-            ts = np.array(ts_values)
-            preds = np.array(predictions)
-            gts = np.array(ground_truths)
+            # 3) Detected anomalies as orange vlines + markers
+            det_idx = np.where(preds == 1)[0]
+            ax.vlines(det_idx, ymin=min(ts) - 0.02 * (ts.max() - ts.min()),
+                      ymax=max(ts) + 0.02 * (ts.max() - ts.min()),
+                      color="#ff7f0e", lw=1.0, alpha=0.9)
+            ax.scatter(det_idx, ts[det_idx], s=18, color="#ff7f0e", zorder=3)
 
-            # Top‐left: no forecast
-            plot_detection(ts, np.zeros_like(ts), gts, preds, "No Forecast", axs[0, 0])
-            # Top‐right: with forecast
-            plot_detection(ts, preds, gts, preds, "With Forecast", axs[0, 1])
-            # Bottom panels: if you have a second series, replace below;
-            # otherwise reuse the same for demo
-            plot_detection(ts, np.zeros_like(ts), gts, preds, "No Forecast", axs[1, 0])
-            plot_detection(ts, preds, gts, preds, "With Forecast", axs[1, 1])
+            # Cosmetics
+            ax.set_title("Detections vs. Ground Truth")
+            ax.set_xlabel("Time index")
+            ax.set_ylabel("Value")
+
+            # Custom legend entries so spans/vlines show up nicely
+            legend_elems = [
+                Line2D([0], [0], color="#1f77b4", lw=1.5, label="Signal"),
+                Patch(facecolor="#2ca02c", edgecolor="none", alpha=0.25, label="True anomaly"),
+                Line2D([0], [0], color="#ff7f0e", lw=1.5, label="Detected anomaly"),
+            ]
+            ax.legend(handles=legend_elems, loc="upper left")
 
             plt.tight_layout()
-            plt.savefig(os.path.join(record_dir, f"detection_episode_{i_episode}.svg"), format="svg")
+            out_path = os.path.join(record_dir, f"detections_episode_{i_episode}.svg")
+            #plt.savefig(out_path, format="svg")
+            plt.savefig(out_path.replace(".svg", ".png"), dpi=300)
             plt.close(fig)
+            # ─────────────────────────────────────────────────────────────────────────────
             # ─────────────────────────────────────────────────────────────────
 
     rec_file.close()
