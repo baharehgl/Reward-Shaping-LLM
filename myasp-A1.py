@@ -34,6 +34,11 @@ import llm_shaping
 importlib.reload(llm_shaping)
 from llm_shaping import compute_potential, shaped_reward, llm_logs
 
+# Canary tests: check φ(s) values before training
+print(">>> φ(zeros)      =", compute_potential((0.0,)*25))
+print(">>> φ(spike@last) =", compute_potential(tuple([0.0]*24 + [10.0])))
+print("Last logs:", llm_logs[-2:])
+
 
 compute_potential.cache_clear()
 llm_logs.clear()
