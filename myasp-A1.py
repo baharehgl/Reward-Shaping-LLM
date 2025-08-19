@@ -71,7 +71,7 @@ n_steps = 25  # sliding window length
 n_input_dim = 2  # dimension of input to LSTM
 n_hidden_dim = 128  # hidden dimension
 
-validation_separate_ratio = 0.9
+validation_separate_ratio = 0.8
 
 # Canary: should print exactly one LLM CALL
 print(">>> TRAIN CANARY: φ(zeros) =", compute_potential((0.0,)*n_steps))
