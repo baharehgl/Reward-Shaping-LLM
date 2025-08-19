@@ -611,44 +611,103 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             plt.close()
             '''
 
+            def _merge_indices_to_spans(idxs, gap=1):
+                """Merge consecutive indices into (start,end) spans inclusive."""
+                idxs = np.asarray(sorted(set(int(i) for i in idxs)), dtype=int)
+                if idxs.size == 0:
+                    return []
+                spans = []
+                s = e = idxs[0]
+                for x in idxs[1:]:
+                    if x <= e + gap:
+                        e = x
+                    else:
+                        spans.append((s, e))
+                        s = e = x
+                spans.append((s, e))
+                return spans
+
+            def _draw_truth_spans(ax, spans):
+                for s, e in spans:
+                    ax.axvspan(s - 0.5, e + 0.5, color="#2ca02c", alpha=0.25)  # green translucent
+
+            def _draw_detected_spans(ax, spans, ts=None):
+                # light gray translucent blocks + optional dots at the signal value
+                for s, e in spans:
+                    ax.axvspan(s - 0.5, e + 0.5, color="#7f7f7f", alpha=0.25)
+                if ts is not None and len(spans) > 0:
+                    centers = [int((s + e) / 2) for s, e in spans]
+                    centers = [c for c in centers if 0 <= c < len(ts)]
+                    if centers:
+                        ax.scatter(centers, np.asarray(ts)[centers], s=18, color="#7f7f7f", zorder=3)
+
+            def _auto_zoom_windows(true_spans, N, length, pad=100):
+                """Pick up to N windows around the largest true anomaly spans; fallback to start."""
+                wins = []
+                if true_spans:
+                    # sort by span length (desc)
+                    sorted_spans = sorted(true_spans, key=lambda se: se[1] - se[0], reverse=True)
+                    for s, e in sorted_spans[:N]:
+                        a = max(0, s - pad)
+                        b = min(length, e + pad)
+                        wins.append((a, b))
+                # fallback if not enough
+                while len(wins) < N:
+                    start = 0 if len(wins) == 0 else length // 2
+                    wins.append((start, min(length, start + min(1500, length))))
+                return wins[:N]
+
             ts = np.array(ts_values, dtype=float)
-            gts = np.array(ground_truths, dtype=int)  # 0/1 ground-truth anomalies
-            preds = np.array(predictions, dtype=int)  # 0/1 detected anomalies
+            gts = np.array(ground_truths, dtype=int)  # 0/1 truth
+            preds = np.array(predictions, dtype=int)  # 0/1 detections
 
-            fig, ax = plt.subplots(figsize=(12, 4))
-
-            # 1) Original signal
-            ax.plot(ts, lw=1.2, color="#1f77b4", label="Signal")
-
-            # 2) True anomalies as translucent green spans
             true_idx = np.where(gts == 1)[0]
-            for t in true_idx:
-                ax.axvspan(t - 0.5, t + 0.5, color="#2ca02c", alpha=0.25)
-
-            # 3) Detected anomalies as orange vlines + markers
             det_idx = np.where(preds == 1)[0]
-            ax.vlines(det_idx, ymin=min(ts) - 0.02 * (ts.max() - ts.min()),
-                      ymax=max(ts) + 0.02 * (ts.max() - ts.min()),
-                      color="#ff7f0e", lw=1.0, alpha=0.9)
-            ax.scatter(det_idx, ts[det_idx], s=18, color="#ff7f0e", zorder=3)
 
-            # Cosmetics
-            ax.set_title("Detections vs. Ground Truth")
-            ax.set_xlabel("Time index")
-            ax.set_ylabel("Value")
+            true_spans = _merge_indices_to_spans(true_idx)
+            det_spans = _merge_indices_to_spans(det_idx)
 
-            # Custom legend entries so spans/vlines show up nicely
+            fig, axs = plt.subplots(2, 2, figsize=(12, 6), sharey='row')
+            (ax_full_truth, ax_full_both), (ax_zoom1, ax_zoom2) = axs
+
+            # ── Top-left: Full series, truth only
+            ax_full_truth.plot(ts, lw=1.2, color="#1f77b4")  # teal/blue signal
+            _draw_truth_spans(ax_full_truth, true_spans)
+            ax_full_truth.set_title(f"{env.repodirext[env.datasetidx]} (truth)")
+            ax_full_truth.set_xlabel("timestamp");
+            ax_full_truth.set_ylabel("value")
+
+            # ── Top-right: Full series, truth + detected
+            ax_full_both.plot(ts, lw=1.0, color="#1f77b4")
+            _draw_truth_spans(ax_full_both, true_spans)
+            _draw_detected_spans(ax_full_both, det_spans, ts=ts)
+            ax_full_both.set_title(f"{env.repodirext[env.datasetidx]} (truth + detected)")
+            ax_full_both.set_xlabel("timestamp");
+            ax_full_both.set_ylabel("value")
+
+            # ── Bottom row: two zoomed windows around anomalies (or fallbacks)
+            wins = _auto_zoom_windows(true_spans, N=2, length=len(ts), pad=200)
+            for ax, (a, b) in zip((ax_zoom1, ax_zoom2), wins):
+                ax.plot(np.arange(a, b), ts[a:b], lw=1.2, color="#1f77b4")
+                # draw spans clipped to window
+                _draw_truth_spans(ax, [(max(a, s), min(b - 1, e)) for s, e in true_spans if e >= a and s < b])
+                _draw_detected_spans(ax, [(max(a, s), min(b - 1, e)) for s, e in det_spans if e >= a and s < b], ts=ts)
+                ax.set_xlim(a, b)
+                ax.set_title(f"zoom {a}–{b}")
+                ax.set_xlabel("timestamp");
+                ax.set_ylabel("value")
+
+            # Legend (consistent with your example)
             legend_elems = [
-                Line2D([0], [0], color="#1f77b4", lw=1.5, label="Signal"),
+                Line2D([0], [0], color="#1f77b4", lw=2, label="Original signal"),
                 Patch(facecolor="#2ca02c", edgecolor="none", alpha=0.25, label="True anomaly"),
-                Line2D([0], [0], color="#ff7f0e", lw=1.5, label="Detected anomaly"),
+                Patch(facecolor="#7f7f7f", edgecolor="none", alpha=0.25, label="Detected anomaly"),
             ]
-            ax.legend(handles=legend_elems, loc="upper left")
+            fig.legend(handles=legend_elems, loc="upper center", ncol=3, frameon=False)
 
-            plt.tight_layout()
-            out_path = os.path.join(record_dir, f"detections_episode_{i_episode}.svg")
-            #plt.savefig(out_path, format="svg")
-            plt.savefig(out_path.replace(".svg", ".png"), dpi=300)
+            plt.tight_layout(rect=(0, 0, 1, 0.94))  # leave room for legend
+            out = os.path.join(record_dir, f"detections_episode_{i_episode}.svg")
+            plt.savefig(out, format="svg")
             plt.close(fig)
             # ─────────────────────────────────────────────────────────────────────────────
             # ─────────────────────────────────────────────────────────────────
