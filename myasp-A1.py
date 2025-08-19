@@ -51,7 +51,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 ############################
 # Macros and Hyperparameters.
 DATAFIXED = 0  # whether target is fixed to a single time series
-EPISODES = 3  # number of episodes (for demonstration)
+EPISODES = 10  # number of episodes (for demonstration)
 DISCOUNT_FACTOR = 0.5  # reward discount factor
 EPSILON = 0.5  # epsilon-greedy parameter
 EPSILON_DECAY = 1.00  # epsilon decay
