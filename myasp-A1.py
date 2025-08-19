@@ -67,7 +67,7 @@ ANOMALY = 1
 action_space = [NOT_ANOMALY, ANOMALY]
 action_space_n = len(action_space)
 
-n_steps = 40  # sliding window length
+n_steps = 15  # sliding window length
 n_input_dim = 2  # dimension of input to LSTM
 n_hidden_dim = 128  # hidden dimension
 
