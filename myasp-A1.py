@@ -71,7 +71,7 @@ n_steps = 25  # sliding window length
 n_input_dim = 2  # dimension of input to LSTM
 n_hidden_dim = 128  # hidden dimension
 
-validation_separate_ratio = 0.8
+validation_separate_ratio = 0.9
 
 # Canary: should print exactly one LLM CALL
 print(">>> TRAIN CANARY: φ(zeros) =", compute_potential((0.0,)*n_steps))
@@ -761,7 +761,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
     data_directory = os.path.join(current_dir, "normal-data")
     x_train = load_normal_data(data_directory, n_steps)
     vae, _ = build_vae(original_dim, latent_dim, intermediate_dim)
-    vae.fit(x_train, epochs=2, batch_size=32)
+    vae.fit(x_train, epochs=20, batch_size=32)
     vae.save('vae_model.h5')
 
     # We'll run on 100% of data by default
