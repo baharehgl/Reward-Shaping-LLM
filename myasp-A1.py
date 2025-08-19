@@ -1,20 +1,18 @@
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import itertools
 import random
 import sys
-import os
 import time
 from scipy import stats
 import tensorflow as tf
 
+import os, textwrap
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-
 
 tf.compat.v1.disable_eager_execution()
 
@@ -612,12 +610,12 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             '''
 
             def _merge_indices_to_spans(idxs, gap=1):
-                """Merge consecutive indices into (start,end) spans inclusive."""
+                """Merge consecutive indices into (start,end) inclusive spans."""
                 idxs = np.asarray(sorted(set(int(i) for i in idxs)), dtype=int)
                 if idxs.size == 0:
                     return []
-                spans = []
-                s = e = idxs[0]
+                spans, s = [], idxs[0]
+                e = s
                 for x in idxs[1:]:
                     if x <= e + gap:
                         e = x
@@ -641,25 +639,24 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
                     if centers:
                         ax.scatter(centers, np.asarray(ts)[centers], s=18, color="#7f7f7f", zorder=3)
 
-            def _auto_zoom_windows(true_spans, N, length, pad=100):
-                """Pick up to N windows around the largest true anomaly spans; fallback to start."""
+            def _auto_zoom_windows(true_spans, N, length, pad=200):
+                """Pick up to N windows around the largest true anomaly spans; fallback windows if needed."""
                 wins = []
                 if true_spans:
-                    # sort by span length (desc)
                     sorted_spans = sorted(true_spans, key=lambda se: se[1] - se[0], reverse=True)
                     for s, e in sorted_spans[:N]:
                         a = max(0, s - pad)
                         b = min(length, e + pad)
                         wins.append((a, b))
-                # fallback if not enough
                 while len(wins) < N:
-                    start = 0 if len(wins) == 0 else length // 2
+                    start = 0 if len(wins) == 0 else max(0, length // 2 - 300)
                     wins.append((start, min(length, start + min(1500, length))))
                 return wins[:N]
 
-            ts = np.array(ts_values, dtype=float)
-            gts = np.array(ground_truths, dtype=int)  # 0/1 truth
-            preds = np.array(predictions, dtype=int)  # 0/1 detections
+            # Prepare series
+            ts = np.array(ts_values, dtype=float)  # original signal
+            gts = np.array(ground_truths, dtype=int)  # 0/1 ground-truth anomalies
+            preds = np.array(predictions, dtype=int)  # 0/1 detected anomalies
 
             true_idx = np.where(gts == 1)[0]
             det_idx = np.where(preds == 1)[0]
@@ -667,13 +664,19 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             true_spans = _merge_indices_to_spans(true_idx)
             det_spans = _merge_indices_to_spans(det_idx)
 
-            fig, axs = plt.subplots(2, 2, figsize=(12, 6), sharey='row')
+            # Short, readable series label (avoid long path in title)
+            raw_label = str(env.repodirext[env.datasetidx]) if hasattr(env, "repodirext") else "series"
+            series_name = os.path.splitext(os.path.basename(raw_label))[0]
+            series_name = textwrap.shorten(series_name, width=40, placeholder="…")
+
+            # Figure (2x2) with auto layout
+            fig, axs = plt.subplots(2, 2, figsize=(12, 6), sharey='row', constrained_layout=True)
             (ax_full_truth, ax_full_both), (ax_zoom1, ax_zoom2) = axs
 
             # ── Top-left: Full series, truth only
-            ax_full_truth.plot(ts, lw=1.2, color="#1f77b4")  # teal/blue signal
+            ax_full_truth.plot(ts, lw=1.2, color="#1f77b4")
             _draw_truth_spans(ax_full_truth, true_spans)
-            ax_full_truth.set_title(f"{env.repodirext[env.datasetidx]} (truth)")
+            ax_full_truth.set_title(f"{series_name} (truth)", fontsize=11)
             ax_full_truth.set_xlabel("timestamp");
             ax_full_truth.set_ylabel("value")
 
@@ -681,31 +684,36 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             ax_full_both.plot(ts, lw=1.0, color="#1f77b4")
             _draw_truth_spans(ax_full_both, true_spans)
             _draw_detected_spans(ax_full_both, det_spans, ts=ts)
-            ax_full_both.set_title(f"{env.repodirext[env.datasetidx]} (truth + detected)")
+            ax_full_both.set_title(f"{series_name} (truth + detected)", fontsize=11)
             ax_full_both.set_xlabel("timestamp");
             ax_full_both.set_ylabel("value")
 
-            # ── Bottom row: two zoomed windows around anomalies (or fallbacks)
+            # ── Bottom row: two zoomed windows
             wins = _auto_zoom_windows(true_spans, N=2, length=len(ts), pad=200)
             for ax, (a, b) in zip((ax_zoom1, ax_zoom2), wins):
                 ax.plot(np.arange(a, b), ts[a:b], lw=1.2, color="#1f77b4")
-                # draw spans clipped to window
-                _draw_truth_spans(ax, [(max(a, s), min(b - 1, e)) for s, e in true_spans if e >= a and s < b])
-                _draw_detected_spans(ax, [(max(a, s), min(b - 1, e)) for s, e in det_spans if e >= a and s < b], ts=ts)
+                # clip spans to window
+                clip_truth = [(max(a, s), min(b - 1, e)) for s, e in true_spans if e >= a and s < b]
+                clip_det = [(max(a, s), min(b - 1, e)) for s, e in det_spans if e >= a and s < b]
+                _draw_truth_spans(ax, clip_truth)
+                _draw_detected_spans(ax, clip_det, ts=ts)
                 ax.set_xlim(a, b)
-                ax.set_title(f"zoom {a}–{b}")
+                ax.set_title(f"zoom {a}–{b}", fontsize=11)
                 ax.set_xlabel("timestamp");
                 ax.set_ylabel("value")
 
-            # Legend (consistent with your example)
+            # Legend above the plots (no overlap with titles)
             legend_elems = [
                 Line2D([0], [0], color="#1f77b4", lw=2, label="Original signal"),
                 Patch(facecolor="#2ca02c", edgecolor="none", alpha=0.25, label="True anomaly"),
                 Patch(facecolor="#7f7f7f", edgecolor="none", alpha=0.25, label="Detected anomaly"),
             ]
-            fig.legend(handles=legend_elems, loc="upper center", ncol=3, frameon=False)
+            fig.legend(handles=legend_elems, loc="upper center", ncol=3, frameon=False, bbox_to_anchor=(0.5, 1.02))
 
-            plt.tight_layout(rect=(0, 0, 1, 0.94))  # leave room for legend
+            # If you still see crowding on some systems, slightly reduce top area:
+            fig.subplots_adjust(top=0.90)
+
+            # Save
             out = os.path.join(record_dir, f"detections_episode_{i_episode}.svg")
             plt.savefig(out, format="svg")
             plt.close(fig)
