@@ -1016,6 +1016,6 @@ def train_wrapper(num_LP, num_AL, discount_factor):
 #train_wrapper(100, 1000, 0.92)
 #train_wrapper(150, 5000, 0.94)
 #train_wrapper(200, 10000, 0.96)
-train_wrapper(200, 1000, 0.96)
-#train_wrapper(200, 5000, 0.96)
+#train_wrapper(200, 1000, 0.96)
+train_wrapper(200, 5000, 0.96)
 #train_wrapper(200, 10000, 0.96)
