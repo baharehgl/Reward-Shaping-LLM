@@ -632,12 +632,12 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             def _draw_detected_spans(ax, spans, ts=None):
                 # light gray translucent blocks + optional dots at the signal value
                 for s, e in spans:
-                    ax.axvspan(s - 0.5, e + 0.5, color="#7f7f7f", alpha=0.25)
+                    ax.axvspan(s - 0.5, e + 0.5, color="red", alpha=0.25)
                 if ts is not None and len(spans) > 0:
                     centers = [int((s + e) / 2) for s, e in spans]
                     centers = [c for c in centers if 0 <= c < len(ts)]
                     if centers:
-                        ax.scatter(centers, np.asarray(ts)[centers], s=18, color="#7f7f7f", zorder=3)
+                        ax.scatter(centers, np.asarray(ts)[centers], s=18, color="red", zorder=3)
 
             def _auto_zoom_windows(true_spans, N, length, pad=200):
                 """Pick up to N windows around the largest true anomaly spans; fallback windows if needed."""
@@ -676,7 +676,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             # ── Top-left: Full series, truth only
             ax_full_truth.plot(ts, lw=1.2, color="#1f77b4")
             _draw_truth_spans(ax_full_truth, true_spans)
-            ax_full_truth.set_title(f"{series_name} (truth)", fontsize=11)
+            ax_full_truth.set_title("truth", fontsize=11)
             ax_full_truth.set_xlabel("timestamp");
             ax_full_truth.set_ylabel("value")
 
@@ -684,7 +684,7 @@ def q_learning_validator(env, estimator, num_episodes, record_dir=None, plot=1):
             ax_full_both.plot(ts, lw=1.0, color="#1f77b4")
             _draw_truth_spans(ax_full_both, true_spans)
             _draw_detected_spans(ax_full_both, det_spans, ts=ts)
-            ax_full_both.set_title(f"{series_name} (truth + detected)", fontsize=11)
+            ax_full_both.set_title("truth + detected", fontsize=11)
             ax_full_both.set_xlabel("timestamp");
             ax_full_both.set_ylabel("value")
 
