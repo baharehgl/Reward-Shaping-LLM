@@ -11,7 +11,7 @@ if "OPENAI_API_KEY" not in os.environ:
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
 LLM_CHOICE   = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")   # "gpt-4o(-mini)", "gpt-3.5-turbo", "llama-3", "phi-2"
-PHI_SCALE    = float(os.getenv("PHI_SCALE", "1.0"))
+PHI_SCALE    = float(os.getenv("PHI_SCALE", "0.5"))
 ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2"))
 PHI_DEBUG    = os.getenv("PHI_DEBUG", "0") == "1"       # prints a few raw responses
 
@@ -43,20 +43,25 @@ def _normalize_for_prompt(xs):
     return ([0.0] * len(xs)) if sd < 1e-8 else ((xs - mu) / sd).tolist()
 
 def _build_prompt(txt: str) -> str:
-    # Few-shot + guidance to use the full range. Works for GPT and HF text-generation.
     return (
         "Task: Score anomaly severity in a numeric sequence.\n"
-        "Return ONLY JSON {\"severity\": s} with s in [0.0, 1.0]. Use the full range.\n"
-        "Guidelines: 0.00 normal noise; 0.25 small drift; 0.50 mean shift/moderate spikes; "
-        "0.75 sustained spikes; 0.95 extreme outliers.\n"
+        "Return ONLY JSON {\"severity\": s} where s∈[0.0,1.0].\n"
+        "Be CONSERVATIVE: true anomalies are rare (<1% of windows). If unsure, use 0.00–0.10.\n"
+        "Heuristics:\n"
+        " • 0.00–0.10: normal noise, periodic peaks, smooth trends.\n"
+        " • 0.25: small drift or a single mild spike.\n"
+        " • 0.50: mean shift or repeated moderate spikes.\n"
+        " • 0.70: sustained deviation ≥3 points or an outlier ~3σ.\n"
+        " • 0.90: extreme outliers or long sustained change.\n"
         "Examples:\n"
-        "  [0,0,0,0,0]             -> {\"severity\": 0.00}\n"
-        "  [0,0,0.1,0.2,0.1]       -> {\"severity\": 0.25}\n"
-        "  [0,0,1.5,1.7,1.6]       -> {\"severity\": 0.70}\n"
-        "  [0,3.0,0,-2.5,0]        -> {\"severity\": 0.95}\n"
+        "  [0,0,0,0,0]                   -> {\"severity\": 0.00}\n"
+        "  [0.1,0.2,0.1,0.2,0.1]         -> {\"severity\": 0.05}   # periodic peaks = normal\n"
+        "  [0.0,0.0,0.1,0.2,0.1]         -> {\"severity\": 0.15}\n"
+        "  [0.0,0.0,1.5,0.1,0.1]         -> {\"severity\": 0.40}   # single spike\n"
+        "  [0.0,0.1,1.2,1.3,1.3]         -> {\"severity\": 0.80}   # sustained jump\n"
+        "  [0.0,0.0,2.5,2.6,2.7]         -> {\"severity\": 0.90}\n"
         f"Sequence: [{txt}]"
     )
-
 def _parse_severity(raw: str) -> float:
     raw = (raw or "").strip()
     # JSON first
