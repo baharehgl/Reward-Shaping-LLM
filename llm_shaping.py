@@ -41,7 +41,7 @@ def _normalize_for_prompt(xs):
     mu = xs.mean()
     sd = xs.std()
     return ([0.0] * len(xs)) if sd < 1e-8 else ((xs - mu) / sd).tolist()
-
+'''
 def _build_prompt(txt: str) -> str:
     return (
         "Task: Score anomaly severity in a numeric sequence.\n"
@@ -63,6 +63,24 @@ def _build_prompt(txt: str) -> str:
         "  [0,3.0,0,-2.5,0]        -> {\"severity\": 0.95}\n"
         f"\nSequence: [{txt}]"
     )
+    
+ '''
+
+def _build_prompt(txt: str) -> str:
+    # Few-shot + guidance to use the full range. Works for GPT and HF text-generation.
+    return (
+        "Task: Score anomaly severity in a numeric sequence.\n"
+        "Return ONLY JSON {\"severity\": s} with s in [0.0, 1.0]. Use the full range.\n"
+        "Guidelines: 0.00 normal noise; 0.25 small drift; 0.50 mean shift/moderate spikes; "
+        "0.75 sustained spikes; 0.95 extreme outliers.\n"
+        "Examples:\n"
+        "  [0,0,0,0,0]             -> {\"severity\": 0.00}\n"
+        "  [0,0,0.1,0.2,0.1]       -> {\"severity\": 0.25}\n"
+        "  [0,0,1.5,1.7,1.6]       -> {\"severity\": 0.70}\n"
+        "  [0,3.0,0,-2.5,0]        -> {\"severity\": 0.95}\n"
+        f"Sequence: [{txt}]"
+    )
+
 def _parse_severity(raw: str) -> float:
     raw = (raw or "").strip()
     # JSON first
