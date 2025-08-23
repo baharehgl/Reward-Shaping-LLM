@@ -10,7 +10,7 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("You must export OPENAI_API_KEY")
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
-LLM_CHOICE   = os.getenv("LLM_CHOICE", "gpt-3.5-turbo")   # "gpt-4o(-mini)", "gpt-3.5-turbo", "llama-3", "phi-2"
+LLM_CHOICE   = os.getenv("LLM_CHOICE", "llama-3")   # "gpt-4o(-mini)", "gpt-3.5-turbo", "llama-3", "phi-2"
 PHI_SCALE    = float(os.getenv("PHI_SCALE", "1.0"))
 ROUND_DIGITS = int(os.getenv("PHI_ROUND_DIGITS", "2"))
 PHI_DEBUG    = os.getenv("PHI_DEBUG", "0") == "1"       # prints a few raw responses
