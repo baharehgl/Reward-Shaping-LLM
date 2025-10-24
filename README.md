@@ -95,21 +95,18 @@ active_learning:
 
 ```
 
-
 ## 🧱 Reward construction
 
 - **Base classification reward:** TP = +5, TN = +1, FP = −1, FN = −5
-
 - **VAE augmentation (R₂):** add reconstruction MSE
-
 - **Dynamic mixing:**
 
 $$
-R_{\text{total}} = R_1 + \lambda(t)\,R_2
+R_{\mathrm{total}} = R_1 + \lambda(t)\,R_2
 $$
 
 $$
-\lambda_{t+1} = \operatorname{clip}\!\big(\lambda_t + \alpha\,[R_{\text{target}} - R_{\text{episode}}],\, \lambda_{\min},\, \lambda_{\max}\big)
+\lambda_{t+1} = \mathrm{clip}\left(\lambda_t + \alpha\,(R_{\text{target}} - R_{\text{episode}}), \lambda_{\mathrm{min}}, \lambda_{\mathrm{max}}\right)
 $$
 
 - **PBRS with LLM:**
@@ -117,7 +114,6 @@ $$
 $$
 r' = r + \gamma\,\phi(s') - \phi(s)
 $$
-
 
 ## ▶️ Quick start
 ```bash
