@@ -1,19 +1,25 @@
 # Reward-Shaping-LLM
-**LLM-based potential reward shaping for RL time-series anomaly detection (with VAE dynamic scaling + active learning).**  
+**LLM-Enhanced Reinforcement Learning for Time Series Anomaly Detection**  
 LSTM-DQN agent + LLM-derived semantic potentials + VAE reconstruction guidance + active learning/label propagation.
 
 [📄 Paper (PDF)](./paper/IEEE_Conference__LLM_Based_Potential_Reward.pdf) 
+
+<div align="center">
+  <img
+    src="Figure/Proposed-LLM.png"
+    width="600"
+    height="250"
+    alt="Proposed Figure">
+</div>
 
 ---
 
 ## ✨ What’s inside
 - **LLM-based Potential-Based Reward Shaping (PBRS)**  
-  Policy-invariant shaping with a potential \( \phi(s) \) predicted by an LLM over sliding windows:  
-  \[
-  r'(s,a,s') = r(s,a,s') + \gamma \,\phi(s') - \phi(s)
-  \]
+  Policy-invariant shaping with a potential $\phi(s)$ predicted by an LLM over sliding windows:  
+  $r'(s,a,s') = r(s,a,s') + \gamma\,\phi(s') - \phi(s)$
 - **Dynamic reward blending**  
-  Mix supervised classification feedback with VAE reconstruction error using a time-varying controller \( \lambda(t) \).
+  Mix supervised classification feedback with VAE reconstruction error using a time-varying controller $\lambda(t)$.
 - **Active learning + label propagation**  
   Query the most uncertain windows (small Q-margin) and propagate labels to neighbors.
 - **Benchmarks**  
@@ -92,27 +98,25 @@ active_learning:
 
 ## 🧱 Reward construction
 
-- **Base classification reward:** TP = +5, TN = +1, FP = −1, FN = −5  
-- **VAE augmentation \(R_2\):** add reconstruction MSE  
+- **Base classification reward:** TP = +5, TN = +1, FP = −1, FN = −5
+
+- **VAE augmentation (R₂):** add reconstruction MSE
+
 - **Dynamic mixing:**
 
-  $$
-  R_{\text{total}} = R_1 + \lambda(t)\,R_2
-  $$
+$$
+R_{\text{total}} = R_1 + \lambda(t)\,R_2
+$$
 
-  $$
-  \lambda_{t+1}
-  = \mathrm{clip}\!\big(
-      \lambda_t + \alpha\,[\,R_{\text{target}} - R_{\text{episode}}\,],
-      \lambda_{\min}, \lambda_{\max}
-    \big)
-  $$
+$$
+\lambda_{t+1} = \operatorname{clip}\!\big(\lambda_t + \alpha\,[R_{\text{target}} - R_{\text{episode}}],\, \lambda_{\min},\, \lambda_{\max}\big)
+$$
 
 - **PBRS with LLM:**
 
-  $$
-   r' = r + \gamma\,\phi(s') - \phi(s)
-  $$
+$$
+r' = r + \gamma\,\phi(s') - \phi(s)
+$$
 
 
 ## ▶️ Quick start
@@ -156,4 +160,16 @@ Query the lowest-margin samples and propagate labels to their nearest neighbors 
 
 **Interpretation.** Llama-3 variants often balance precision/recall well; GPT-3.5 may push recall higher on Yahoo but can reduce precision; smaller models (e.g., Phi-2) can be conservative on SMD.
 
+
+
+## 📣 Citation
+
+If you use this code or ideas, please cite:
+```
+@inproceedings{golchin2025llm_reward_shaping,
+  title     = {LLM-Enhanced Reinforcement Learning for Time Series Anomaly Detection},
+  author    = {Golchin, Bahareh and Rekabdar, Banafsheh and Justo, Danielle},
+  booktitle = {IEEE 20th International Conference on Semantic Computing (ICSC)},
+  year      = {2025}
+}
 ```
