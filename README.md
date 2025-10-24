@@ -157,7 +157,7 @@ Query the lowest-margin samples and propagate labels to their nearest neighbors 
 **Interpretation.** Llama-3 variants often balance precision/recall well; GPT-3.5 may push recall higher on Yahoo but can reduce precision; smaller models (e.g., Phi-2) can be conservative on SMD.
 
 
-
+<!--
 ## 📣 Citation
 
 If you use this code or ideas, please cite:
@@ -169,3 +169,4 @@ If you use this code or ideas, please cite:
   year      = {2025}
 }
 ```
+-->
