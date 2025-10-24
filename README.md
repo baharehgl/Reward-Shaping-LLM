@@ -40,7 +40,9 @@ conda activate rsl
 pip install -r requirements.txt
 # If you use OpenAI or other providers, also: pip install openai
 
-```🔧 Configuration
+
+## 🔧 Configuration
+```
 seed: 42
 device: "cuda"   # or "cpu"
 
