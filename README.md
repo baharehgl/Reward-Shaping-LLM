@@ -88,22 +88,7 @@ active_learning:
 
 
 ```
-## ▶️ Quick start
-```bash
 
-# Train on Yahoo-A1 with Llama-3.2-3B potential shaping
-python train.py \
-  --config configs/base.yaml \
-  --data.name yahoo_a1 \
-  --llm.provider hf_local --llm.model llama-3.2-3b-instruct
-
-# Evaluate a trained checkpoint
-python evaluate.py \
-  --checkpoint runs/yahoo_a1_llama3/best.ckpt \
-  --metrics precision recall f1
-
-
-```
 
 ## 🧱 Reward construction
 
@@ -130,7 +115,45 @@ python evaluate.py \
   $$
 
 
+## ▶️ Quick start
+```bash
+
+# Train on Yahoo-A1 with Llama-3.2-3B potential shaping
+python train.py \
+  --config configs/base.yaml \
+  --data.name yahoo_a1 \
+  --llm.provider hf_local --llm.model llama-3.2-3b-instruct
+
+# Evaluate a trained checkpoint
+python evaluate.py \
+  --checkpoint runs/yahoo_a1_llama3/best.ckpt \
+  --metrics precision recall f1
+
+
 ```
 
 
+## 🔍 Active learning
 
+After each episode, compute the **margin** between the top two actions’ Q-values:
+
+$$
+\mathrm{Margin}(s) = \big|\,Q(s, a_0) - Q(s, a_1)\,\big|
+$$
+
+Query the lowest-margin samples and propagate labels to their nearest neighbors (e.g., k-NN in an embedding space).
+
+
+
+## 📊 Example target results
+
+*(Exact values depend on seeds and implementation details.)*
+
+| Dataset  | LLM          | Precision | Recall |   F1   |
+|----------|--------------|----------:|------:|------:|
+| Yahoo-A1 | Llama-3.2-3B |    0.6051 | 0.9565 | 0.7413 |
+| SMD      | Llama-3.2-3B |    0.3813 | 0.8685 | 0.5300 |
+
+**Interpretation.** Llama-3 variants often balance precision/recall well; GPT-3.5 may push recall higher on Yahoo but can reduce precision; smaller models (e.g., Phi-2) can be conservative on SMD.
+
+```
