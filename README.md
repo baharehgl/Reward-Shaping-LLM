@@ -88,5 +88,49 @@ active_learning:
 
 
 ```
+## ▶️ Quick start
+```bash
+
+# Train on Yahoo-A1 with Llama-3.2-3B potential shaping
+python train.py \
+  --config configs/base.yaml \
+  --data.name yahoo_a1 \
+  --llm.provider hf_local --llm.model llama-3.2-3b-instruct
+
+# Evaluate a trained checkpoint
+python evaluate.py \
+  --checkpoint runs/yahoo_a1_llama3/best.ckpt \
+  --metrics precision recall f1
+
+
+```
+
+## 🧱 Reward construction
+
+- **Base classification reward:** TP = +5, TN = +1, FP = −1, FN = −5  
+- **VAE augmentation \(R_2\):** add reconstruction MSE  
+- **Dynamic mixing:**
+
+  $$
+  R_{\text{total}} = R_1 + \lambda(t)\,R_2
+  $$
+
+  $$
+  \lambda_{t+1}
+  = \mathrm{clip}\!\big(
+      \lambda_t + \alpha\,[\,R_{\text{target}} - R_{\text{episode}}\,],
+      \lambda_{\min}, \lambda_{\max}
+    \big)
+  $$
+
+- **PBRS with LLM:**
+
+  $$
+   r' = r + \gamma\,\phi(s') - \phi(s)
+  $$
+
+
+```
+
 
 
