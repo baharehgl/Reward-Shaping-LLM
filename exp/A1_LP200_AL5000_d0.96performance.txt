@@ -1,6 +1,0 @@
-Episode 1: Precision:1.0, Recall:0.058823529411764705, F1-score:0.1111111111111111
-Episode 2: Precision:1.0, Recall:0.19047619047619047, F1-score:0.32
-Episode 3: Precision:1.0, Recall:0.043478260869565216, F1-score:0.08333333333333333
-Episode 4: Precision:0.08333333333333333, Recall:0.03278688524590164, F1-score:0.04705882352941177
-Episode 5: Precision:1.0, Recall:0.3, F1-score:0.4615384615384615
-Episode 6: Precision:0.0, Recall:0.0, F1-score:0.0
