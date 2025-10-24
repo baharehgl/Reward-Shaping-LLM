@@ -39,9 +39,9 @@ conda activate rsl
 # 3) Install
 pip install -r requirements.txt
 # If you use OpenAI or other providers, also: pip install openai
----
 
 
+```
 ## 🔧 Configuration
 ```bash
 seed: 42
