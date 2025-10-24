@@ -39,3 +39,51 @@ conda activate rsl
 # 3) Install
 pip install -r requirements.txt
 # If you use OpenAI or other providers, also: pip install openai
+
+```🔧 Configuration
+seed: 42
+device: "cuda"   # or "cpu"
+
+data:
+  name: "yahoo_a1"   # or "smd"
+  window: 25
+  stride: 1
+
+rl:
+  gamma: 0.99
+  algo: "dqn"
+  hidden_size: 128
+
+rewards:
+  # Confusion-matrix reward (TP/TN/FP/FN)
+  tp: 5
+  tn: 1
+  fp: -1
+  fn: -5
+  # VAE dynamic scaling
+  lambda:
+    init: 0.2
+    alpha: 0.05
+    target_episode_reward: 50
+    min: 0.0
+    max: 1.0
+
+vae:
+  latent_dim: 16
+  hidden_size: 128
+
+llm:
+  provider: "openai"         # "openai" | "hf_local"
+  model: "gpt-3.5-turbo"     # or "llama-3.2-3b-instruct", "phi-2", etc.
+  max_cache: 100000          # memoization for cost/latency
+  round_decimals: 2          # round inputs before caching
+
+active_learning:
+  enabled: true
+  query_per_episode: 32
+  label_propagation_k: 128
+
+
+```
+
+
