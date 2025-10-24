@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 
 ## 🔧 Configuration
-```
+```bash
 seed: 42
 device: "cuda"   # or "cpu"
 
