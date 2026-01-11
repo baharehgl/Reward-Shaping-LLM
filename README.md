@@ -2,7 +2,7 @@
 **LLM-Enhanced Reinforcement Learning for Time Series Anomaly Detection**  
 LSTM-DQN agent + LLM-derived semantic potentials + VAE reconstruction guidance + active learning/label propagation.
 
-[📄 Paper (PDF)]([./paper/IEEE_Conference__LLM_Based_Potential_Reward.pdf](https://arxiv.org/pdf/2601.02511)) 
+[📄 Paper (PDF)]((https://arxiv.org/pdf/2601.02511)) 
 
 <div align="center">
   <img
