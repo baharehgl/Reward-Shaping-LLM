@@ -11,9 +11,12 @@
 #   export LLM_CHOICE=llama-3   (or gpt-3.5-turbo, phi-2)
 #   export OPENAI_API_KEY=...   (required by llm_shaping.py even for llama/phi)
 # =====================================================================
-DATASET_NAME    = "NEWDATA"                                   # used in the exp/ folder name
-DATASET_DIR     = "datasets/NEWDATA/labeled"                  # relative to this file
-NORMAL_DATA_DIR = "datasets/NEWDATA/normal"                   # relative to this file
+DATASET_NAME    = "STANFORD_P2_RHR"
+TRAIN_DIR       = "datasets/STANFORD_P2_RHR/train"
+TEST_DIR        = "datasets/STANFORD_P2_RHR/test"
+NORMAL_DATA_DIR = "datasets/STANFORD_P2_RHR/normal"
+PRED_CSV        = "results/predictions.csv"
+MAX_VAE_WINDOWS = 200000
 VAE_PATH        = f"vae_{DATASET_NAME.lower()}_model.h5"
 # =====================================================================
 
@@ -47,6 +50,7 @@ sys.path.append(current_dir)
 
 # Import the environment.
 from env import EnvTimeSeriesfromRepo
+from stanford_utils import predict_split
 from sklearn.svm import OneClassSVM
 from sklearn.semi_supervised import LabelPropagation, LabelSpreading
 
@@ -71,6 +75,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0,1"
 # Macros and Hyperparameters.
 DATAFIXED = 0  # whether target is fixed to a single time series
 EPISODES = 3  # number of episodes (for demonstration)
+NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "3"))
 DISCOUNT_FACTOR = 0.5  # reward discount factor
 EPSILON = 0.5  # epsilon-greedy parameter
 EPSILON_DECAY = 1.00  # epsilon decay
@@ -90,7 +95,7 @@ n_steps = 25  # sliding window length
 n_input_dim = 2  # dimension of input to LSTM
 n_hidden_dim = 128  # hidden dimension
 
-validation_separate_ratio = 0.9
+validation_separate_ratio = 1.0
 
 # Canary: should print exactly one LLM CALL
 print(">>> TRAIN CANARY: φ(zeros) =", compute_potential((0.0,)*n_steps))
@@ -133,6 +138,9 @@ def load_normal_data(data_path, n_steps):
                 window = values[i:i + n_steps]
                 windows.append(window)
     windows = np.array(windows)
+    if len(windows) > MAX_VAE_WINDOWS:
+        rng = np.random.RandomState(0)
+        windows = windows[rng.choice(len(windows), MAX_VAE_WINDOWS, replace=False)]
     scaler = StandardScaler()
     scaled_windows = scaler.fit_transform(windows)
     return scaled_windows
@@ -791,7 +799,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
         # Build experiment directory name
         exp_name = f"{DATASET_NAME}_LP{num_LP}_AL{num_AL}_d{discount_factor:.2f}"
         exp_relative_dir = [exp_name]
-        dataset_dirs = [os.path.join(current_dir, DATASET_DIR)]
+        dataset_dirs = [os.path.join(current_dir, TRAIN_DIR)]
 
         for i, ds_path in enumerate(dataset_dirs):
             # Instantiate environment
@@ -838,7 +846,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
             assert len(llm_logs) >= 2, "LLM shaping did not fire!"
 
             # Prepare test env (no shaping)
-            env_test = EnvTimeSeriesfromRepo(ds_path)
+            env_test = EnvTimeSeriesfromRepo(os.path.join(current_dir, TEST_DIR))
             env_test.timeseries_curser_init = n_steps
             env_test.statefnc = RNNBinaryStateFuc
             env_test.rewardfnc = RNNBinaryRewardFucTest
@@ -871,7 +879,7 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                 episode_rewards, coef_history = q_learning(
                     env, sess, qlearn_estimator, target_estimator,
 
-                    num_episodes=3,
+                    num_episodes=NUM_EPISODES,
                     num_epoches=10,
                     experiment_dir=experiment_dir,
                     replay_memory_size=500000,
@@ -887,11 +895,9 @@ def train_wrapper(num_LP, num_AL, discount_factor):
                     test=test,
                     vae_model=vae
                 )
-                final_metric = q_learning_validator(
-                    env_test, qlearn_estimator,
-                    int(env.datasetsize * (1 - validation_separate_ratio)),
-                    experiment_dir
-                )
+                policy_test = make_epsilon_greedy_policy(qlearn_estimator, env_test.action_space_n, sess)
+                predict_split(env_test, policy_test, os.path.join(current_dir, PRED_CSV), n_steps)
+                final_metric = None
 
             # Save plots and logs
             save_plots(experiment_dir, episode_rewards, coef_history)
