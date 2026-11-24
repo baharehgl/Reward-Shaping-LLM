@@ -1,0 +1,7 @@
+ydata-labeled-time-series-anomalies-v1_0/
+normal-data/
+.idea/
+__pycache__/
+*.h5
+exp/
+debug_llm_potentials.csv
