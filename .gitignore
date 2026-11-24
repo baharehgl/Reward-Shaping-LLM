@@ -5,3 +5,8 @@ __pycache__/
 *.h5
 exp/
 debug_llm_potentials.csv
+SMD/
+KPI_data/
+environment/myKPI.csv
+phase2_ground_truth.hdf
+__MACOSX/
